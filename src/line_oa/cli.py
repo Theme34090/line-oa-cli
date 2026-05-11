@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .commands import content as content_cmd
 from .commands import list_chats, profile, read, send
 from .errors import CliError, EXIT_GENERIC
 
@@ -82,6 +83,21 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--raw", action="store_true",
                     help="Emit the full LINE API response and HTTP status")
 
+    # content
+    pc = sub.add_parser(
+        "content",
+        help="Fetch a chat attachment by its contentHash",
+        description="Fetch a chat attachment (image/video/audio/file) by its contentHash.",
+        epilog=content_cmd.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pc.add_argument("content_hash",
+                    help="The contentHash from a media message in `line-oa read`")
+    pc.add_argument("--out", default=None,
+                    help="Write to this path instead of the cache")
+    pc.add_argument("--no-cache", action="store_true",
+                    help="Always re-fetch even if cached")
+
     # account group
     pa = sub.add_parser("account", help="Manage OA accounts")
     pa_sub = pa.add_subparsers(dest="account_cmd", required=True)
@@ -128,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
         "read": read.run,
         "profile": profile.run,
         "send": send.run,
+        "content": content_cmd.run,
         "account": account.run,
         "auth": auth.run,
         "export": export.run,

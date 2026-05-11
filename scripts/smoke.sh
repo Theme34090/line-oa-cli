@@ -125,6 +125,50 @@ case ",$FROM_VALUES," in
         ;;
 esac
 
+heading "Content fetch"
+HASH=$(line-oa list --limit 30 2>/dev/null | python3 -c "
+import json, subprocess, sys
+chats = json.load(sys.stdin).get('chats', [])
+for c in chats:
+    if (c.get('latest') or {}).get('type') == 'image':
+        out = subprocess.run(['line-oa', 'read', c['chatId']],
+                             capture_output=True, text=True)
+        if out.returncode != 0:
+            continue
+        for m in json.loads(out.stdout).get('messages', []):
+            if m.get('type') == 'image' and m.get('contentHash'):
+                print(m['contentHash']); sys.exit(0)
+")
+if [ -n "$HASH" ]; then
+    if line-oa content "$HASH" > /tmp/line-oa-smoke.out 2> /tmp/line-oa-smoke.err; then
+        PATH_VAL=$(python3 -c "import json,sys; print(json.load(open('/tmp/line-oa-smoke.out')).get('path',''))")
+        BYTES=$(python3 -c "import json,sys; print(json.load(open('/tmp/line-oa-smoke.out')).get('bytes',0))")
+        if [ -f "$PATH_VAL" ] && [ "$BYTES" -gt 0 ]; then
+            green "content fetch wrote $BYTES bytes to $PATH_VAL"
+            PASS=$((PASS+1))
+        else
+            red "content fetch: missing file or zero bytes (path=$PATH_VAL bytes=$BYTES)"
+            FAIL=$((FAIL+1))
+        fi
+        # second call should report cached=true
+        CACHED=$(line-oa content "$HASH" 2>/dev/null | python3 -c "import json,sys; print(json.load(sys.stdin).get('cached'))")
+        if [ "$CACHED" = "True" ]; then
+            green "content fetch second call cached=True"
+            PASS=$((PASS+1))
+        else
+            red "content fetch second call expected cached=True, got '$CACHED'"
+            FAIL=$((FAIL+1))
+        fi
+    else
+        red "content fetch errored"
+        sed 's/^/    /' /tmp/line-oa-smoke.err
+        FAIL=$((FAIL+1))
+    fi
+else
+    yellow "no image in latest 30 chats — skipping content fetch check"
+    SKIP=$((SKIP+1))
+fi
+
 heading "Send (dry-run only — real sends not tested here)"
 check "send --dry-run (auto-manual)" 0 line-oa send "$TEST_CHAT" "smoke" --dry-run
 check "send --dry-run --no-auto-manual" 0 line-oa send "$TEST_CHAT" "smoke" --dry-run --no-auto-manual

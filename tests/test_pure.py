@@ -173,6 +173,7 @@ class CurateEventTests(unittest.TestCase):
             "from": "manual",
             "type": "text",
             "text": "hi",
+            "contentHash": None,
         })
 
     def test_message_sent_automated(self):
@@ -205,6 +206,44 @@ class CurateEventTests(unittest.TestCase):
         result = curate_event(evt, self.BOT)
         self.assertEqual(result["type"], "sticker")
         self.assertIsNone(result["text"])
+
+    def test_image_message_carries_content_hash(self):
+        evt = {
+            "type": "message",
+            "timestamp": 1700000000000,
+            "source": {"userId": self.CUSTOMER},
+            "message": {
+                "id": "613477392824664423",
+                "type": "image",
+                "contentHash": "2dc9fcn7HDxVhyAQexN0Mu==",
+            },
+        }
+        result = curate_event(evt, self.BOT)
+        self.assertEqual(result["type"], "image")
+        self.assertEqual(result["contentHash"], "2dc9fcn7HDxVhyAQexN0Mu==")
+        self.assertIsNone(result["text"])
+        self.assertEqual(result["from"], "customer")
+
+    def test_text_message_content_hash_is_null(self):
+        evt = {
+            "type": "messageSent",
+            "timestamp": 1,
+            "source": {"userId": self.BOT},
+            "bizId": "manual-uuid",
+            "message": {"id": "x", "type": "text", "text": "hi"},
+        }
+        self.assertIsNone(curate_event(evt, self.BOT)["contentHash"])
+
+    def test_sticker_message_content_hash_is_null(self):
+        # Stickers don't ride on chat-content.line.biz — leave contentHash null
+        # even if LINE happens to put one on the message blob.
+        evt = {
+            "type": "message",
+            "timestamp": 1,
+            "source": {"userId": self.CUSTOMER},
+            "message": {"id": "x", "type": "sticker", "contentHash": "ignored"},
+        }
+        self.assertIsNone(curate_event(evt, self.BOT)["contentHash"])
 
     def test_chat_read_event_dropped(self):
         evt = {

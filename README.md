@@ -54,6 +54,7 @@ pbpaste | line-oa auth from-curl
 | `line-oa read CHAT_ID [--backward TOK] [--all] [--raw]` | Read messages (newest first; `backward` token for older) |
 | `line-oa profile CHAT_ID [--raw]` | Customer profile |
 | `line-oa send CHAT_ID TEXT [--dry-run] [--no-auto-manual] [--manual-ttl-minutes N] [--raw]` | Send text reply (`TEXT="-"` reads stdin) |
+| `line-oa content CONTENT_HASH [--out PATH] [--no-cache]` | Download a chat attachment (image/video/audio/file); cached under `~/.cache/line-oa/content/` |
 | `line-oa account list \| use NAME \| add NAME BOTID \| remove NAME` | OA registry |
 | `line-oa auth from-curl` | Refresh cookies (cURL on stdin) |
 | `line-oa auth status` | Check session |

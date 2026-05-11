@@ -10,6 +10,9 @@ AUTO_RESPONSE_BIZ_ID = "__AUTO_RESPONSE"
 
 MESSAGE_EVENT_TYPES = ("messageSent", "message")
 
+# Message subtypes that carry a fetchable contentHash (chat-content.line.biz).
+MEDIA_MESSAGE_TYPES = ("image", "video", "audio", "file")
+
 
 def derive_from(source_user_id: str | None, biz_id: str | None,
                 bot_id: str) -> str:
@@ -36,6 +39,7 @@ def curate_event(evt: dict, bot_id: str) -> dict | None:
     if evt.get("type") not in MESSAGE_EVENT_TYPES:
         return None
     msg = evt.get("message") or {}
+    msg_type = msg.get("type")
     return {
         "id": msg.get("id"),
         "timestamp": evt.get("timestamp"),
@@ -44,8 +48,9 @@ def curate_event(evt: dict, bot_id: str) -> dict | None:
             evt.get("bizId"),
             bot_id,
         ),
-        "type": msg.get("type"),
+        "type": msg_type,
         "text": msg.get("text"),
+        "contentHash": msg.get("contentHash") if msg_type in MEDIA_MESSAGE_TYPES else None,
     }
 
 

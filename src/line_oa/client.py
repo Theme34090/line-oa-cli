@@ -16,6 +16,8 @@ CLIENT_VERSION = "20240513144702"
 
 CHAT_LIST_PAGE_SIZE = 25  # LINE's natural max
 
+CONTENT_HOST = "https://chat-content.line.biz"
+
 
 def make_client(cfg: dict[str, Any], bot_id: str) -> httpx.Client:
     cookies = cfg.get("cookies") or {}
@@ -39,6 +41,29 @@ def make_client(cfg: dict[str, Any], bot_id: str) -> httpx.Client:
         follow_redirects=False,
         headers=headers,
     )
+
+
+def fetch_content(
+    client: httpx.Client,
+    bot_id: str,
+    content_hash: str,
+) -> tuple[bytes, str]:
+    """Download a chat attachment (image/video/audio/file) by its contentHash.
+
+    Returns (bytes, content_type). The endpoint lives on a different host
+    (chat-content.line.biz), but shares the cookie jar with the main client.
+    """
+    url = f"{CONTENT_HOST}/bot/{bot_id}/{content_hash}"
+    resp = client.get(
+        url,
+        headers={"Accept": "image/*,video/*,audio/*,application/octet-stream,*/*;q=0.8"},
+    )
+    if resp.status_code != 200:
+        raise CliError(
+            f"content fetch failed: {resp.status_code} {resp.text[:200]}",
+            code=map_http_status(resp.status_code),
+        )
+    return resp.content, resp.headers.get("content-type", "application/octet-stream")
 
 
 def iter_chats(

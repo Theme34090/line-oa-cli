@@ -24,11 +24,12 @@ chatRead watermark events, quote tokens, and source metadata):
     "chatId":   "U...",
     "messages": [
       {
-        "id":        "<message id>",
-        "timestamp": <epoch ms>,
-        "from":      "customer" | "manual" | "automated",
-        "type":      "text" | "sticker" | "image" | "video" | "file" | ...,
-        "text":      <string; null for non-text>
+        "id":          "<message id>",
+        "timestamp":   <epoch ms>,
+        "from":        "customer" | "manual" | "automated",
+        "type":        "text" | "sticker" | "image" | "video" | "audio" | "file" | ...,
+        "text":        <string; null for non-text>,
+        "contentHash": <string; null unless type is image/video/audio/file>
       }
     ],
     "backward": "<pagination cursor or null>"
@@ -36,6 +37,10 @@ chatRead watermark events, quote tokens, and source metadata):
 
 Messages come newest-first. Pass --backward <token> to fetch older,
 or --all to paginate until exhausted (capped at 1000 messages).
+
+For media messages (type ∈ image/video/audio/file), download the binary with:
+  line-oa content "<contentHash>"
+The CLI prints {path, contentType, bytes, cached} — open the path locally.
 
 Curated mode drops non-message events (chatRead watermarks etc.).
 Use --raw if you need them.

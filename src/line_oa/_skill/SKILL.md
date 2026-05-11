@@ -29,6 +29,7 @@ Rules:
 | `line-oa read CHAT_ID [--backward TOK] [--all] [--raw]` | Read messages, newest first |
 | `line-oa profile CHAT_ID [--raw]` | Customer profile |
 | `line-oa send CHAT_ID TEXT [--dry-run] [--manual-ttl-minutes N] [--raw]` | Send text reply (TEXT="-" reads stdin). Auto-flips chat to manual mode. |
+| `line-oa content CONTENT_HASH [--out PATH] [--no-cache]` | Download a chat attachment (image/video/audio/file) and cache it locally |
 | `line-oa account list \| use NAME \| add NAME BOTID \| remove NAME` | OA registry |
 | `line-oa auth from-curl` | Refresh cookies (cURL on stdin) |
 | `line-oa auth status` | Check session is alive |
@@ -47,6 +48,21 @@ Curated shapes (default) are stable and CS-focused: `chatId`, `name`, `unread`, 
 - `"automated"` — the OA's auto-response sent it (LINE bizId `__AUTO_RESPONSE`)
 
 Pass `--raw` only when the curated shape lacks a field you need (e.g. delivery-receipt timestamps `userLastReadAt`, tags, mute state, quote tokens). Defaulting to `--raw` is wasteful — it adds ~15 noisy fields per chat to your context.
+
+## Images and other media — fetch them, don't guess
+
+When `line-oa read` returns a message with `type` in `{image, video, audio, file}`, the curated shape includes a `contentHash` string. The message has **no `text`** — the meaningful content is the attachment itself. Customers send receipts, screenshots, payment slips, ID cards, product photos: ignoring images means missing the actual question.
+
+Fetch the binary:
+
+    line-oa content "<contentHash>"
+
+This downloads-and-caches under `~/.cache/line-oa/content/<botId>/` and prints `{"path": "...", "contentType": "...", "bytes": N, "cached": <bool>}`. Open the returned path with whatever can render it (your file/image reader). Cached files are reused — content is immutable per hash.
+
+Rules:
+- When you `read` a chat that has any image/video/file in the recent window, fetch the most recent one(s) before drafting a reply. Stop at the messages relevant to the user's question — don't bulk-download history.
+- Describe to the user what you see in the image when relevant ("the receipt totals ฿2,851.75 from CP Axtra on 11 May 2026"). Don't paste raw paths at the user.
+- Stickers don't have a `contentHash` and aren't fetchable through this endpoint — skip them.
 
 ## Exit codes — handle these distinctly
 
