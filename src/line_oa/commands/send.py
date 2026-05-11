@@ -36,14 +36,9 @@ def _read_text(arg: str) -> str:
     return arg
 
 
-def _use_manual_chat(client, base: str, bot_id: str, chat_id: str,
-                     expires_at: int) -> None:
-    url = f"/api/v2/bots/{bot_id}/chats/{chat_id}/useManualChat"
-    resp = client.put(
-        url,
-        json={"expiresAt": expires_at},
-        headers=_write_headers(base, bot_id, chat_id),
-    )
+def _use_manual_chat(client, url: str, expires_at: int,
+                     headers: dict[str, str]) -> None:
+    resp = client.put(url, json={"expiresAt": expires_at}, headers=headers)
     if resp.status_code not in (200, 204):
         raise CliError(
             f"useManualChat failed: {resp.status_code} {resp.text[:200]}",
@@ -83,18 +78,15 @@ def run(args) -> int:
         return EXIT_OK
 
     manual_info = None
+    headers = _write_headers(base, bot_id, args.chat_id)
     with make_client(cfg, bot_id) as client:
         if auto_manual:
-            _use_manual_chat(client, base, bot_id, args.chat_id, expires_at)
+            _use_manual_chat(client, manual_url, expires_at, headers)
             manual_info = {
                 "expiresAt": expires_at,
                 "ttlMinutes": args.manual_ttl_minutes,
             }
-        resp = client.post(
-            send_url,
-            json=body,
-            headers=_write_headers(base, bot_id, args.chat_id),
-        )
+        resp = client.post(send_url, json=body, headers=headers)
     if resp.status_code not in (200, 201, 204):
         raise CliError(
             f"send failed: {resp.status_code} {resp.text[:300]}",
