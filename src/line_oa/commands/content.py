@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import hashlib
 import mimetypes
+import os
 from pathlib import Path
 
 from .. import config as cfgmod
@@ -14,14 +14,15 @@ Fetch a chat attachment (image/video/audio/file) by its contentHash.
 
 The hash is what `line-oa read` returns in `messages[].contentHash` for
 media messages. The binary is cached under
-  ~/.cache/line-oa/content/<botId>/
-keyed by the hash; subsequent calls return the cached path without
-hitting the network. LINE content is immutable per hash, so the cache
-is permanent.
+  $XDG_CACHE_HOME/line-oa/content/<botId>/   (or ~/.cache/...)
+The cache is permanent (LINE content is immutable per hash) and
+restricted to owner-only (0600/0700) since attachments can include
+receipts, ID cards, and other sensitive material.
 
 Output (JSON to stdout):
 
   {
+    "account":     "<name>",
     "path":        "/abs/path/to/file.jpg",
     "contentType": "image/jpeg",
     "bytes":       503631,
@@ -59,54 +60,69 @@ def _ext_for(content_type: str) -> str:
     return mimetypes.guess_extension(main) or ".bin"
 
 
+def _safe_name(content_hash: str) -> str:
+    # LINE's contentHash is URL-safe base64 plus `=` padding. Strip the
+    # padding (still unique) and any unexpected char so the filename is
+    # portable across filesystems.
+    base = content_hash.rstrip("=")
+    return "".join(c if c.isalnum() or c in "_-" else "_" for c in base)
+
+
 def _cache_dir(bot_id: str) -> Path:
-    return Path.home() / ".cache" / "line-oa" / "content" / bot_id
+    return cfgmod.cache_path() / "content" / bot_id
 
 
-def _cache_key(content_hash: str) -> str:
-    return hashlib.sha256(content_hash.encode("utf-8")).hexdigest()[:16]
+def _write_secure(path: Path, data: bytes) -> None:
+    """Atomically write `data` to `path` with 0600 permissions."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.tmp.{os.getpid()}")
+    tmp.write_bytes(data)
+    try:
+        tmp.chmod(0o600)
+    except OSError:
+        pass
+    os.replace(tmp, path)
 
 
 def run(args) -> int:
     cfg = cfgmod.load(args.config)
-    _, bot_id = cfgmod.resolve_account(cfg, args.account)
+    name, bot_id = cfgmod.resolve_account(cfg, args.account)
     content_hash: str = args.content_hash
+    safe = _safe_name(content_hash)
 
-    # Explicit --out: always fetch, write to the given path.
-    if args.out is not None:
-        out_path = Path(args.out).expanduser().resolve()
-        with make_client(cfg, bot_id) as client:
-            data, ctype = fetch_content(client, bot_id, content_hash)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_bytes(data)
-        emit_json({
-            "path": str(out_path),
-            "contentType": ctype,
-            "bytes": len(data),
-            "cached": False,
-        })
-        return EXIT_OK
-
-    # Cache-aware path: check for an existing file under any extension.
-    cache_dir = _cache_dir(bot_id)
-    key = _cache_key(content_hash)
-    if not args.no_cache and cache_dir.exists():
-        for existing in cache_dir.glob(f"{key}.*"):
-            ctype, _ = mimetypes.guess_type(existing.name)
-            emit_json({
-                "path": str(existing),
-                "contentType": ctype or "application/octet-stream",
-                "bytes": existing.stat().st_size,
-                "cached": True,
-            })
-            return EXIT_OK
+    if args.out is None and not args.no_cache:
+        cache_dir = _cache_dir(bot_id)
+        if cache_dir.exists():
+            for existing in cache_dir.glob(f"{safe}.*"):
+                ctype, _ = mimetypes.guess_type(existing.name)
+                emit_json({
+                    "account": name,
+                    "path": str(existing),
+                    "contentType": ctype or "application/octet-stream",
+                    "bytes": existing.stat().st_size,
+                    "cached": True,
+                })
+                return EXIT_OK
 
     with make_client(cfg, bot_id) as client:
         data, ctype = fetch_content(client, bot_id, content_hash)
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    out_path = cache_dir / f"{key}{_ext_for(ctype)}"
-    out_path.write_bytes(data)
+
+    if args.out is not None:
+        out_path = Path(args.out).expanduser().resolve()
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(data)
+    else:
+        cache_dir = _cache_dir(bot_id)
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            cache_dir.chmod(0o700)
+        except OSError:
+            pass
+        out_path = cache_dir / f"{safe}{_ext_for(ctype)}"
+        _write_secure(out_path, data)
+
     emit_json({
+        "account": name,
         "path": str(out_path),
         "contentType": ctype,
         "bytes": len(data),

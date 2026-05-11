@@ -21,6 +21,15 @@ def config_path() -> Path:
     return base / "line-oa" / "config.json"
 
 
+def cache_path() -> Path:
+    override = os.environ.get("LINE_OA_CACHE")
+    if override:
+        return Path(override).expanduser()
+    xdg = os.environ.get("XDG_CACHE_HOME")
+    base = Path(xdg).expanduser() if xdg else Path.home() / ".cache"
+    return base / "line-oa"
+
+
 def empty_config() -> dict[str, Any]:
     return {
         "baseUrl": DEFAULT_BASE_URL,
