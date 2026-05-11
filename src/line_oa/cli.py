@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .commands import list_chats, profile, read, send
 from .errors import CliError, EXIT_GENERIC
 
 
@@ -17,26 +18,57 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     # list
-    pl = sub.add_parser("list", help="List chats")
+    pl = sub.add_parser(
+        "list",
+        help="List chats",
+        description="List chats with curated triage state and last-message preview.",
+        epilog=list_chats.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     pl.add_argument("--limit", type=int, default=25)
     pl.add_argument("--since-days", type=int, default=None)
     pl.add_argument("--waiting", action="store_true",
                     help="Only chats whose latest message is from the customer")
     pl.add_argument("--folder", default="ALL", choices=["ALL", "UNREAD", "PINNED"])
+    pl.add_argument("--raw", action="store_true",
+                    help="Emit the full LINE response instead of the curated shape")
 
     # read
-    pr = sub.add_parser("read", help="Read messages from one chat")
+    pr = sub.add_parser(
+        "read",
+        help="Read messages from one chat",
+        description="Read messages newest-first; curated to message events only.",
+        epilog=read.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     pr.add_argument("chat_id")
     pr.add_argument("--backward", default=None, help="Pagination cursor")
     pr.add_argument("--all", dest="fetch_all", action="store_true",
                     help="Paginate until exhausted (capped at 1000 messages)")
+    pr.add_argument("--raw", action="store_true",
+                    help="Emit the full LINE response (includes chatRead "
+                         "watermarks and quote tokens)")
 
     # profile
-    pp = sub.add_parser("profile", help="Get a chat's customer profile")
+    pp = sub.add_parser(
+        "profile",
+        help="Get a chat's customer profile",
+        description="Customer-identity slice (name, friend, push window).",
+        epilog=profile.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     pp.add_argument("chat_id")
+    pp.add_argument("--raw", action="store_true",
+                    help="Emit the full LINE chat-metadata blob")
 
     # send
-    ps = sub.add_parser("send", help="Send a text reply")
+    ps = sub.add_parser(
+        "send",
+        help="Send a text reply",
+        description="Send a text reply; auto-flips the chat to manual mode first.",
+        epilog=send.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     ps.add_argument("chat_id")
     ps.add_argument("text", help='Message text, or "-" to read from stdin')
     ps.add_argument("--dry-run", action="store_true")
@@ -47,6 +79,8 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--manual-ttl-minutes", type=int, default=60,
                     help="How long to keep the chat in manual mode (default 60). "
                          "Auto-reverts to auto/bot mode after this expires.")
+    ps.add_argument("--raw", action="store_true",
+                    help="Emit the full LINE API response and HTTP status")
 
     # account group
     pa = sub.add_parser("account", help="Manage OA accounts")
@@ -86,8 +120,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
-    # Lazy import to keep --help fast.
-    from .commands import account, auth, export, install_skill, list_chats, profile, read, send
+    # Lazy import non-build-time deps to keep --help fast.
+    from .commands import account, auth, export, install_skill
 
     dispatch = {
         "list": list_chats.run,

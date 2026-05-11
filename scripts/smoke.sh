@@ -70,15 +70,60 @@ check "profile" 0 line-oa profile "$TEST_CHAT"
 
 NAME=$(line-oa profile "$TEST_CHAT" 2>/dev/null | python3 -c "
 import json, sys
-print(json.load(sys.stdin).get('profile', {}).get('name', ''))
+print(json.load(sys.stdin).get('name', ''))
 ")
 if [ "$NAME" = "$EXPECTED_NAME" ]; then
-    green "profile.name == '$EXPECTED_NAME'"
+    green "profile.name (curated) == '$EXPECTED_NAME'"
     PASS=$((PASS+1))
 else
-    red "profile.name expected '$EXPECTED_NAME', got '$NAME'"
+    red "profile.name (curated) expected '$EXPECTED_NAME', got '$NAME'"
     FAIL=$((FAIL+1))
 fi
+
+check "profile --raw" 0 line-oa profile "$TEST_CHAT" --raw
+RAW_NAME=$(line-oa profile "$TEST_CHAT" --raw 2>/dev/null | python3 -c "
+import json, sys
+print(json.load(sys.stdin).get('profile', {}).get('name', ''))
+")
+if [ "$RAW_NAME" = "$EXPECTED_NAME" ]; then
+    green "profile.profile.name (--raw) == '$EXPECTED_NAME'"
+    PASS=$((PASS+1))
+else
+    red "profile.profile.name (--raw) expected '$EXPECTED_NAME', got '$RAW_NAME'"
+    FAIL=$((FAIL+1))
+fi
+
+heading "Curated shape asserts"
+CURATED_KEYS=$(line-oa list --limit 1 2>/dev/null | python3 -c "
+import json, sys
+chats = json.load(sys.stdin).get('chats', [])
+print(','.join(sorted(chats[0].keys())) if chats else '')
+")
+EXPECTED_CURATED="chatId,done,followedUp,lastReceivedAt,latest,name,unread"
+if [ "$CURATED_KEYS" = "$EXPECTED_CURATED" ]; then
+    green "list curated chat keys exactly: $EXPECTED_CURATED"
+    PASS=$((PASS+1))
+else
+    red "list curated keys drifted. expected '$EXPECTED_CURATED', got '$CURATED_KEYS'"
+    FAIL=$((FAIL+1))
+fi
+
+FROM_VALUES=$(line-oa list --limit 25 2>/dev/null | python3 -c "
+import json, sys
+chats = json.load(sys.stdin).get('chats', [])
+froms = {c.get('latest', {}).get('from') for c in chats if c.get('latest')}
+print(','.join(sorted(f for f in froms if f)))
+")
+case ",$FROM_VALUES," in
+    *",customer,"*|*",manual,"*|*",automated,"*)
+        green "list latest.from contains expected categories: $FROM_VALUES"
+        PASS=$((PASS+1))
+        ;;
+    *)
+        red "list latest.from missing all expected categories. got: $FROM_VALUES"
+        FAIL=$((FAIL+1))
+        ;;
+esac
 
 heading "Send (dry-run only — real sends not tested here)"
 check "send --dry-run (auto-manual)" 0 line-oa send "$TEST_CHAT" "smoke" --dry-run

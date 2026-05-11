@@ -8,6 +8,25 @@ from ..errors import (
     emit_json,
     map_http_status,
 )
+from ._curate import curate_profile
+
+
+EPILOG = """\
+Curated output (default; use --raw for the full chat-metadata blob,
+which duplicates fields available from 'line-oa list'):
+
+  {
+    "account":             "<name>",
+    "chatId":              "U...",
+    "name":                "<customer display name>",
+    "friend":              <bool; has added the OA as friend>,
+    "chatType":            "USER" | "GROUP",
+    "pushWindowExpiresAt": <epoch ms; when the 24h reply window closes>
+  }
+
+For chat-level state (unread / done / followedUp / lastReceivedAt /
+latest message) use 'line-oa list' — that's where chat metadata lives.
+"""
 
 
 def run(args) -> int:
@@ -23,9 +42,16 @@ def run(args) -> int:
         )
 
     data = resp.json()
-    emit_json({
-        "account": name,
-        "chatId": args.chat_id,
-        **data,
-    })
+    if args.raw:
+        emit_json({
+            "account": name,
+            "chatId": args.chat_id,
+            **data,
+        })
+    else:
+        emit_json({
+            "account": name,
+            "chatId": args.chat_id,
+            **curate_profile(data),
+        })
     return EXIT_OK

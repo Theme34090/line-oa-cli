@@ -50,10 +50,10 @@ pbpaste | line-oa auth from-curl
 
 | Command | Purpose |
 |---|---|
-| `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED]` | List chats |
-| `line-oa read CHAT_ID [--backward TOK] [--all]` | Read messages (newest first; `backward` token for older) |
-| `line-oa profile CHAT_ID` | Customer profile |
-| `line-oa send CHAT_ID TEXT [--dry-run] [--no-auto-manual] [--manual-ttl-minutes N]` | Send text reply (`TEXT="-"` reads stdin) |
+| `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED] [--raw]` | List chats |
+| `line-oa read CHAT_ID [--backward TOK] [--all] [--raw]` | Read messages (newest first; `backward` token for older) |
+| `line-oa profile CHAT_ID [--raw]` | Customer profile |
+| `line-oa send CHAT_ID TEXT [--dry-run] [--no-auto-manual] [--manual-ttl-minutes N] [--raw]` | Send text reply (`TEXT="-"` reads stdin) |
 | `line-oa account list \| use NAME \| add NAME BOTID \| remove NAME` | OA registry |
 | `line-oa auth from-curl` | Refresh cookies (cURL on stdin) |
 | `line-oa auth status` | Check session |
@@ -61,6 +61,10 @@ pbpaste | line-oa auth from-curl
 | `line-oa install-skill` | Install the Claude Code skill to `~/.claude/skills/line-oa/` |
 
 All read/write verbs emit JSON to stdout. `--account NAME` overrides the current account on any command.
+
+### Output shape — curated by default
+
+`list`, `read`, `profile`, and `send` emit a curated CS-focused JSON shape by default. The full LINE response (delivery receipts, tags, mute state, quote tokens, internal cursors) is available via `--raw` on any of them. Run `line-oa <verb> --help` to see the curated schema for that verb — the epilog documents the field set, semantics (especially `from: "customer" | "manual" | "automated"`), and useful jq one-liners. Schema lives next to the command, so it doesn't drift from the implementation.
 
 ## Exit codes
 

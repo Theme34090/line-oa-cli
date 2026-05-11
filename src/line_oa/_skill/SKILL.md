@@ -25,16 +25,28 @@ Rules:
 
 | Command | Purpose |
 |---|---|
-| `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED]` | List chats |
-| `line-oa read CHAT_ID [--backward TOK] [--all]` | Read messages, newest first |
-| `line-oa profile CHAT_ID` | Customer profile |
-| `line-oa send CHAT_ID TEXT [--dry-run] [--manual-ttl-minutes N]` | Send text reply (TEXT="-" reads stdin). Auto-flips chat to manual mode. |
+| `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED] [--raw]` | List chats |
+| `line-oa read CHAT_ID [--backward TOK] [--all] [--raw]` | Read messages, newest first |
+| `line-oa profile CHAT_ID [--raw]` | Customer profile |
+| `line-oa send CHAT_ID TEXT [--dry-run] [--manual-ttl-minutes N] [--raw]` | Send text reply (TEXT="-" reads stdin). Auto-flips chat to manual mode. |
 | `line-oa account list \| use NAME \| add NAME BOTID \| remove NAME` | OA registry |
 | `line-oa auth from-curl` | Refresh cookies (cURL on stdin) |
 | `line-oa auth status` | Check session is alive |
 | `line-oa export` | Bulk CSV download (rarely needed in CS work) |
 
 All read/write verbs emit JSON to stdout. `--account NAME` overrides current account on any command.
+
+## Planning multi-step work — query the schema first
+
+Before writing jq filters or chaining commands, run `line-oa <verb> --help` for any data-producing verb (`list`, `read`, `profile`, `send`). The `--help` epilog documents the curated output shape, field semantics, and useful jq one-liners. Do this once at the start of a plan — don't guess field names from memory.
+
+Curated shapes (default) are stable and CS-focused: `chatId`, `name`, `unread`, `done`, `followedUp`, `latest.{from,type,text,timestamp}` on chats; `id`, `from`, `type`, `text`, `timestamp` on messages. The `from` field on a chat/message is always one of:
+
+- `"customer"` — the customer sent it
+- `"manual"` — a human OA operator sent it (web console or CLI)
+- `"automated"` — the OA's auto-response sent it (LINE bizId `__AUTO_RESPONSE`)
+
+Pass `--raw` only when the curated shape lacks a field you need (e.g. delivery-receipt timestamps `userLastReadAt`, tags, mute state, quote tokens). Defaulting to `--raw` is wasteful — it adds ~15 noisy fields per chat to your context.
 
 ## Exit codes — handle these distinctly
 

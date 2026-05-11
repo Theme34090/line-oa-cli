@@ -9,6 +9,12 @@ from pathlib import Path
 
 from line_oa import config as cfgmod
 from line_oa.client import CLIENT_VERSION, USER_AGENT, make_client
+from line_oa.commands._curate import (
+    curate_chat,
+    curate_event,
+    curate_profile,
+    derive_from,
+)
 from line_oa.commands.auth import _parse_curl
 from line_oa.commands.list_chats import _is_waiting
 from line_oa.commands.send import _make_send_id
@@ -94,8 +100,15 @@ class IsWaitingTests(unittest.TestCase):
         chat = {"latestEvent": {"source": {"userId": SAMPLE_CHAT}}}
         self.assertTrue(_is_waiting(chat, self.BOT))
 
-    def test_oa_sent(self):
+    def test_oa_sent_manual(self):
         chat = {"latestEvent": {"source": {"userId": self.BOT}}}
+        self.assertFalse(_is_waiting(chat, self.BOT))
+
+    def test_oa_sent_automated(self):
+        chat = {"latestEvent": {
+            "source": {"userId": self.BOT},
+            "bizId": "__AUTO_RESPONSE",
+        }}
         self.assertFalse(_is_waiting(chat, self.BOT))
 
     def test_no_latest_event(self):
@@ -106,6 +119,186 @@ class IsWaitingTests(unittest.TestCase):
 
     def test_source_no_user(self):
         self.assertFalse(_is_waiting({"latestEvent": {"source": {}}}, self.BOT))
+
+
+class DeriveFromTests(unittest.TestCase):
+    BOT = SAMPLE_BOT
+    CUSTOMER = SAMPLE_CHAT
+
+    def test_customer(self):
+        self.assertEqual(derive_from(self.CUSTOMER, None, self.BOT), "customer")
+
+    def test_customer_with_biz_id_still_customer(self):
+        # In real data customer events carry no bizId, but be lenient.
+        self.assertEqual(
+            derive_from(self.CUSTOMER, "__AUTO_RESPONSE", self.BOT), "customer"
+        )
+
+    def test_manual(self):
+        self.assertEqual(
+            derive_from(self.BOT, "fee7f450-6fec-11e9-b49a-fa163e670dc0", self.BOT),
+            "manual",
+        )
+
+    def test_manual_no_biz_id(self):
+        self.assertEqual(derive_from(self.BOT, None, self.BOT), "manual")
+
+    def test_automated(self):
+        self.assertEqual(
+            derive_from(self.BOT, "__AUTO_RESPONSE", self.BOT), "automated"
+        )
+
+    def test_missing_source_treated_as_oa_side(self):
+        # No source.userId → can't be customer; falls through to OA-side
+        # discrimination via bizId.
+        self.assertEqual(derive_from(None, "__AUTO_RESPONSE", self.BOT), "automated")
+        self.assertEqual(derive_from(None, None, self.BOT), "manual")
+
+
+class CurateEventTests(unittest.TestCase):
+    BOT = SAMPLE_BOT
+    CUSTOMER = SAMPLE_CHAT
+
+    def test_message_sent_oa_manual(self):
+        evt = {
+            "type": "messageSent",
+            "timestamp": 1700000000000,
+            "source": {"userId": self.BOT},
+            "bizId": "fee7f450-6fec-11e9-b49a-fa163e670dc0",
+            "message": {"id": "613...", "type": "text", "text": "hi"},
+        }
+        self.assertEqual(curate_event(evt, self.BOT), {
+            "id": "613...",
+            "timestamp": 1700000000000,
+            "from": "manual",
+            "type": "text",
+            "text": "hi",
+        })
+
+    def test_message_sent_automated(self):
+        evt = {
+            "type": "messageSent",
+            "timestamp": 1700000000000,
+            "source": {"userId": self.BOT},
+            "bizId": "__AUTO_RESPONSE",
+            "message": {"id": "1", "type": "text", "text": "auto"},
+        }
+        self.assertEqual(curate_event(evt, self.BOT)["from"], "automated")
+
+    def test_message_received_customer(self):
+        # LINE uses event type "message" (not "messageReceived") for inbound.
+        evt = {
+            "type": "message",
+            "timestamp": 1700000000000,
+            "source": {"userId": self.CUSTOMER},
+            "message": {"id": "2", "type": "text", "text": "hello"},
+        }
+        self.assertEqual(curate_event(evt, self.BOT)["from"], "customer")
+
+    def test_non_text_message_has_null_text(self):
+        evt = {
+            "type": "message",
+            "timestamp": 1,
+            "source": {"userId": self.CUSTOMER},
+            "message": {"id": "x", "type": "sticker"},
+        }
+        result = curate_event(evt, self.BOT)
+        self.assertEqual(result["type"], "sticker")
+        self.assertIsNone(result["text"])
+
+    def test_chat_read_event_dropped(self):
+        evt = {
+            "type": "chatRead",
+            "timestamp": 1,
+            "source": {"userId": self.CUSTOMER},
+            "read": {"watermark": 1},
+        }
+        self.assertIsNone(curate_event(evt, self.BOT))
+
+
+class CurateChatTests(unittest.TestCase):
+    BOT = SAMPLE_BOT
+    CUSTOMER = SAMPLE_CHAT
+
+    def _chat(self, **overrides) -> dict:
+        base = {
+            "chatId": self.CUSTOMER,
+            "read": False,
+            "done": False,
+            "followedUp": False,
+            "lastReceivedAt": 1700000000000,
+            "profile": {"name": "Customer", "iconHash": "noise"},
+            "latestEvent": {
+                "type": "messageReceived",
+                "timestamp": 1700000001000,
+                "source": {"userId": self.CUSTOMER},
+                "message": {"type": "text", "text": "hello"},
+            },
+            # Fields that must be dropped by curation:
+            "tagIds": ["should-be-dropped"],
+            "muteAtPc": True,
+            "lastReadAt": 1234,
+        }
+        base.update(overrides)
+        return base
+
+    def test_basic_projection(self):
+        result = curate_chat(self._chat(), self.BOT)
+        self.assertEqual(result, {
+            "chatId": self.CUSTOMER,
+            "name": "Customer",
+            "unread": True,
+            "done": False,
+            "followedUp": False,
+            "lastReceivedAt": 1700000000000,
+            "latest": {
+                "from": "customer",
+                "type": "text",
+                "text": "hello",
+                "timestamp": 1700000001000,
+            },
+        })
+
+    def test_drops_noise_fields(self):
+        result = curate_chat(self._chat(), self.BOT)
+        for noisy in ("tagIds", "muteAtPc", "lastReadAt", "iconHash"):
+            self.assertNotIn(noisy, result)
+
+    def test_unread_inverts_read(self):
+        self.assertFalse(curate_chat(self._chat(read=True), self.BOT)["unread"])
+        self.assertTrue(curate_chat(self._chat(read=False), self.BOT)["unread"])
+
+    def test_no_latest_event(self):
+        chat = self._chat()
+        chat["latestEvent"] = {}
+        # Empty dict is still truthy in Python, but our curate handles
+        # missing message gracefully.
+        result = curate_chat(chat, self.BOT)
+        # latest is built but with all None inner fields when event is empty
+        self.assertIn("latest", result)
+
+
+class CurateProfileTests(unittest.TestCase):
+    def test_projects_identity_slice(self):
+        blob = {
+            "chatType": "USER",
+            "tagIds": ["dropped"],
+            "profile": {
+                "userId": "U...",
+                "name": "Theme",
+                "friend": True,
+                "lastActivityExpiresAt": 1779000000000,
+                "iconHash": "dropped",
+            },
+            "latestEvent": {"dropped": True},
+            "lastReadAt": 999,
+        }
+        self.assertEqual(curate_profile(blob), {
+            "name": "Theme",
+            "friend": True,
+            "chatType": "USER",
+            "pushWindowExpiresAt": 1779000000000,
+        })
 
 
 class ResolveAccountTests(unittest.TestCase):

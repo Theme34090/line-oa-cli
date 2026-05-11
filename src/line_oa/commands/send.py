@@ -14,6 +14,29 @@ from ..errors import (
 )
 
 
+EPILOG = """\
+Curated output (default; use --raw for the full LINE API response and
+HTTP status):
+
+  {
+    "account":    "<name>",
+    "chatId":     "U...",
+    "sent":       true,
+    "sendId":     "<idempotency key; {chatId}_{epochMs}_{nonce}>",
+    "manualMode": {
+      "flippedNow": <bool; did this call PUT useManualChat?>,
+      "expiresAt":  <epoch ms; when manual mode reverts to auto>
+    } | null
+  }
+
+Send fails on chats in auto/bot mode with HTTP 400 'not_manual_chat_mode'.
+By default this command PUTs /useManualChat first so the send succeeds;
+pass --no-auto-manual to opt out and rely on the chat already being manual.
+
+--dry-run emits the planned request bodies without contacting LINE.
+"""
+
+
 def _make_send_id(chat_id: str) -> str:
     """{chatId}_{epoch_ms}_{8-digit-nonce}. Idempotency key for LINE."""
     ms = int(time.time() * 1000)
@@ -83,8 +106,8 @@ def run(args) -> int:
         if auto_manual:
             _use_manual_chat(client, manual_url, expires_at, headers)
             manual_info = {
+                "flippedNow": True,
                 "expiresAt": expires_at,
-                "ttlMinutes": args.manual_ttl_minutes,
             }
         resp = client.post(send_url, json=body, headers=headers)
     if resp.status_code not in (200, 201, 204):
@@ -93,19 +116,27 @@ def run(args) -> int:
             code=map_http_status(resp.status_code),
         )
 
-    response_body = None
-    if resp.text:
-        try:
-            response_body = resp.json()
-        except Exception:
-            response_body = resp.text
-
-    emit_json({
-        "account": name,
-        "chatId": args.chat_id,
-        "sendId": send_id,
-        "status": resp.status_code,
-        "manualChat": manual_info,
-        "response": response_body,
-    })
+    if args.raw:
+        response_body = None
+        if resp.text:
+            try:
+                response_body = resp.json()
+            except Exception:
+                response_body = resp.text
+        emit_json({
+            "account": name,
+            "chatId": args.chat_id,
+            "sendId": send_id,
+            "status": resp.status_code,
+            "manualChat": manual_info,
+            "response": response_body,
+        })
+    else:
+        emit_json({
+            "account": name,
+            "chatId": args.chat_id,
+            "sent": True,
+            "sendId": send_id,
+            "manualMode": manual_info,
+        })
     return EXIT_OK
