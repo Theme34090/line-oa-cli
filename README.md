@@ -102,6 +102,17 @@ LINE OA chats default to auto/bot mode. The send endpoint rejects messages on au
 
 During the manual window, the OA's automated responses are paused for that chat. Sending again extends the window.
 
+## Development
+
+```bash
+./scripts/test-pure.sh    # pure-function unit tests (offline, ~0.1s)
+./scripts/smoke.sh        # live-cookie smoke checks (no real sends)
+```
+
+`test-pure.sh` runs `unittest` in an ephemeral uv venv against the editable package — exercises cURL parsing, sendId format, `is_waiting` filter, account-resolution precedence, config roundtrip, client headers.
+
+`smoke.sh` exercises every CLI verb against your live OA. Defaults the test chat to `U585253bc9936faa1232995f87a2c7702`; override with `LINE_OA_TEST_CHAT=<chatId>` and `LINE_OA_TEST_CHAT_NAME=<name>` to point at your own test chat. Real `send` is not invoked — only `send --dry-run`.
+
 ## Known limitations
 
 - **One OA login at a time.** Cookies are shared across all configured accounts. Switching LINE Business logins replaces cookies for every account.
