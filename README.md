@@ -92,6 +92,16 @@ line-oa export --output-dir ./archive   # custom output
 
 Output: `./output/{chatId}/messages.csv` (Thai headers, UTF-8 with BOM, matching LINE's native export).
 
+## Switching accounts
+
+`--account NAME` overrides the current account for any command:
+
+```bash
+line-oa --account shop-b list
+```
+
+Or set `LINE_OA_ACCOUNT=shop-b` in your shell to pin it across commands. Resolution order is `--account` → `$LINE_OA_ACCOUNT` → `currentAccount` in config.
+
 ## Manual-mode side effect of `send`
 
 LINE OA chats default to auto/bot mode. The send endpoint rejects messages on auto-mode chats with `400 not_manual_chat_mode`. The web UI flips chats to manual implicitly when an agent starts typing — `line-oa send` does the same by PUTing `/useManualChat` first.

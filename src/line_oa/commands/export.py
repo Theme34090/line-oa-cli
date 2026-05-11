@@ -1,4 +1,3 @@
-"""export — bulk-download all chats as LINE-native CSVs."""
 from __future__ import annotations
 
 import sys
@@ -7,60 +6,18 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 from .. import config as cfgmod
-from ..client import make_client
-from ..errors import (
-    EXIT_OK,
-    EXIT_SESSION_EXPIRED,
-    CliError,
-    map_http_status,
-)
+from ..client import iter_chats, make_client
+from ..errors import EXIT_OK, CliError, map_http_status
 
 
-def _list_chats(client, bot_id: str, cutoff_ms: int | None, max_chats: int | None):
-    all_chats = []
-    next_cursor: str | None = None
-    done = False
-    while not done:
-        params = {
-            "folderType": "ALL",
-            "tagIds": "",
-            "autoTagIds": "",
-            "limit": 25,
-            "prioritizePinnedChat": "true",
-        }
-        if next_cursor:
-            params["next"] = next_cursor
-        resp = client.get(f"/api/v2/bots/{bot_id}/chats", params=params)
-        if resp.status_code != 200:
-            raise CliError(
-                f"list_chats: {resp.status_code} {resp.text[:200]}",
-                code=map_http_status(resp.status_code),
-            )
-        data = resp.json()
-        for chat in data.get("list", []):
-            if cutoff_ms and chat.get("updatedAt", 0) < cutoff_ms:
-                done = True
-                break
-            all_chats.append(chat)
-            if max_chats and len(all_chats) >= max_chats:
-                done = True
-                break
-        next_cursor = data.get("next")
-        if not next_cursor:
-            done = True
-        else:
-            time.sleep(0.2)
-    return all_chats
-
-
-def _download_chat_csv(client, bot_id: str, chat_id: str, tz_offset: int) -> str | None:
+def _download_chat_csv(client, bot_id: str, chat_id: str, tz_offset: int) -> str:
     url = f"/download/{bot_id}/{chat_id}/messages.csv"
     resp = client.get(url, params={"timezoneOffset": f"-{tz_offset}"})
-    if resp.status_code in (401, 302):
-        raise CliError("session expired mid-run; refresh cookies", code=EXIT_SESSION_EXPIRED)
     if resp.status_code != 200:
-        print(f"  [warn] {resp.status_code} {resp.text[:200]}", file=sys.stderr, flush=True)
-        return None
+        raise CliError(
+            f"csv download failed for {chat_id}: {resp.status_code} {resp.text[:200]}",
+            code=map_http_status(resp.status_code),
+        )
     return resp.text
 
 
@@ -82,7 +39,13 @@ def run(args) -> int:
     with make_client(cfg, bot_id) as client:
         print(f"account: {name}", file=sys.stderr, flush=True)
         print("fetching chat list...", file=sys.stderr, flush=True)
-        chats = _list_chats(client, bot_id, cutoff_ms, args.max_chats)
+        chats: list[dict] = []
+        for chat in iter_chats(client, bot_id):
+            if cutoff_ms and chat.get("updatedAt", 0) < cutoff_ms:
+                break
+            chats.append(chat)
+            if args.max_chats and len(chats) >= args.max_chats:
+                break
         print(f"found {len(chats)} chats", file=sys.stderr, flush=True)
 
         for i, chat in enumerate(chats, 1):
@@ -90,8 +53,6 @@ def run(args) -> int:
             display = (chat.get("profile") or {}).get("name") or chat_id
             print(f"[{i}/{len(chats)}] {display} ({chat_id})", file=sys.stderr, flush=True)
             csv_text = _download_chat_csv(client, bot_id, chat_id, tz_offset)
-            if csv_text is None:
-                continue
             chat_dir = output_dir / chat_id
             chat_dir.mkdir(parents=True, exist_ok=True)
             (chat_dir / "messages.csv").write_text(csv_text, encoding="utf-8")

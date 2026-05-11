@@ -1,4 +1,3 @@
-"""read — fetch messages for one chat. Paginated via 'backward' cursor."""
 from __future__ import annotations
 
 import time
@@ -17,9 +16,7 @@ MAX_ALL_MESSAGES = 1000  # safety cap for --all
 
 def _fetch_page(client, bot_id: str, chat_id: str, backward: str | None) -> dict:
     url = f"/api/v3/bots/{bot_id}/chats/{chat_id}/messages"
-    params = {}
-    if backward:
-        params["backward"] = backward
+    params = {"backward": backward} if backward else {}
     resp = client.get(url, params=params)
     if resp.status_code != 200:
         raise CliError(
@@ -39,17 +36,16 @@ def run(args) -> int:
             emit_json({
                 "account": name,
                 "chatId": args.chat_id,
-                "messages": data.get("list") or data.get("messages") or [],
+                "messages": data.get("list", []),
                 "backward": data.get("backward"),
             })
             return EXIT_OK
 
-        # --all: paginate until exhausted or capped
         all_msgs: list = []
         backward: str | None = args.backward
         while True:
             data = _fetch_page(client, bot_id, args.chat_id, backward)
-            page = data.get("list") or data.get("messages") or []
+            page = data.get("list", [])
             all_msgs.extend(page)
             backward = data.get("backward")
             if not backward or not page:

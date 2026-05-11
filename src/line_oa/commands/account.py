@@ -1,4 +1,3 @@
-"""account list/use/add/remove. Pure config IO."""
 from __future__ import annotations
 
 from .. import config as cfgmod
@@ -34,15 +33,13 @@ def cmd_add(args) -> int:
     if args.name in accounts:
         raise CliError(f"account '{args.name}' already exists")
     accounts[args.name] = {"botId": args.bot_id}
-    auto_current = cfg.get("currentAccount") is None
-    if auto_current:
+    if cfg.get("currentAccount") is None:
         cfg["currentAccount"] = args.name
     cfgmod.save(cfg, args.config)
     emit_json({
         "added": args.name,
         "botId": args.bot_id,
         "currentAccount": cfg["currentAccount"],
-        "autoCurrent": auto_current,
     })
     return EXIT_OK
 

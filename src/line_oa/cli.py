@@ -1,4 +1,3 @@
-"""line-oa CLI dispatch."""
 from __future__ import annotations
 
 import argparse
@@ -90,31 +89,27 @@ def main(argv: list[str] | None = None) -> int:
     # Lazy import to keep --help fast.
     from .commands import account, auth, export, install_skill, list_chats, profile, read, send
 
+    dispatch = {
+        "list": list_chats.run,
+        "read": read.run,
+        "profile": profile.run,
+        "send": send.run,
+        "account": account.run,
+        "auth": auth.run,
+        "export": export.run,
+        "install-skill": install_skill.run,
+    }
+
     try:
-        if args.cmd == "list":
-            return list_chats.run(args)
-        if args.cmd == "read":
-            return read.run(args)
-        if args.cmd == "profile":
-            return profile.run(args)
-        if args.cmd == "send":
-            return send.run(args)
-        if args.cmd == "account":
-            return account.run(args)
-        if args.cmd == "auth":
-            return auth.run(args)
-        if args.cmd == "export":
-            return export.run(args)
-        if args.cmd == "install-skill":
-            return install_skill.run(args)
-        parser.error(f"unknown command: {args.cmd}")
+        handler = dispatch.get(args.cmd)
+        if handler is None:
+            raise CliError(f"unknown command: {args.cmd}", code=EXIT_GENERIC)
+        return handler(args)
     except CliError as e:
         print(f"[error] {e}", file=sys.stderr, flush=True)
         return e.code
     except KeyboardInterrupt:
         return 130
-
-    return EXIT_GENERIC
 
 
 if __name__ == "__main__":

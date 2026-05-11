@@ -1,4 +1,3 @@
-"""profile — fetch a chat's customer profile + chat metadata."""
 from __future__ import annotations
 
 from .. import config as cfgmod

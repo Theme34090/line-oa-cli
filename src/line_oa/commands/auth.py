@@ -1,4 +1,3 @@
-"""auth from-curl, auth status."""
 from __future__ import annotations
 
 import re
@@ -11,6 +10,7 @@ import httpx
 from .. import config as cfgmod
 from ..client import make_client
 from ..errors import (
+    EXIT_GENERIC,
     EXIT_OK,
     EXIT_SESSION_EXPIRED,
     CliError,
@@ -35,9 +35,7 @@ def _read_curl(args) -> str:
 
 def _parse_curl(curl_text: str) -> dict:
     """Tokenize a cURL command, extract cookies and referer-derived botId."""
-    # shlex doesn't handle backslash-newline line continuations natively the
-    # way bash does, but it does collapse them when posix=True if we first
-    # strip them. cURL "Copy as cURL" puts each header on its own \-line.
+    # cURL "Copy as cURL" uses \-line continuations; strip before shlex.
     cleaned = curl_text.replace("\\\n", " ").replace("\\\r\n", " ")
     try:
         tokens = shlex.split(cleaned, posix=True)
@@ -99,7 +97,7 @@ def _validate_session(cfg: dict, account_name: str) -> int:
             )
         except httpx.HTTPError as e:
             print(f"[error] network: {e}", file=sys.stderr)
-            return 1
+            return EXIT_GENERIC
     if resp.status_code == 200:
         return EXIT_OK
     if resp.status_code in (302, 401, 403):

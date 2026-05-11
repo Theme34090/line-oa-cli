@@ -1,4 +1,3 @@
-"""install-skill — copy bundled SKILL.md to ~/.claude/skills/line-oa/."""
 from __future__ import annotations
 
 import sys
