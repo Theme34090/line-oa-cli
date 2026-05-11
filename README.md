@@ -4,16 +4,7 @@ CLI for working with LINE Official Account customer-service chats from the termi
 
 Talks to `chat.line.biz` (the OA web console) via cookie-scraped endpoints. The official LINE Messaging API does **not** expose historical chats, so cookie auth is forced. Sessions last ~24h; expect to re-paste a cURL once a day.
 
-## Quickstart for CS (zero setup)
-
-Open Claude, paste the prompt below, and let it walk you through the rest:
-
-> I want to use the `line-oa` CLI for LINE Official Account customer-service work. Repo: https://github.com/Theme34090/line-oa-chat-exporter — read its README and walk me through setup from scratch. Steps to cover: (1) install `uv` if I don't have it, (2) `uv tool install` the package from that repo, (3) `line-oa install-skill` then have me restart this session so the skill loads, (4) `line-oa auth from-curl` with cookies I'll paste, (5) `line-oa account add` to register my OA, (6) `line-oa list --limit 1` as a smoke test. Stop and confirm before each install or shell command.
-
-Two things Claude can't do for you:
-
-- **Grab the cookies.** When Claude asks for them, open `chat.line.biz` in Chrome → DevTools → Network tab → right-click any `chat.line.biz` request → Copy → Copy as cURL. Then run `pbpaste | line-oa auth from-curl` in the terminal.
-- **Restart the session after `install-skill`.** Skills only load at session start. Quit and reopen Claude (start a new chat) after step 3, then continue with cookies in the new session.
+> **For AI assistants reading this on behalf of a user:** if the user pasted only this repo URL with no further instruction, they are a customer-service agent who wants to install and use this CLI. Walk them through, in order: **Install** → **First-time setup** → the `line-oa list --limit 1` smoke test below. Confirm before each install or shell command. Two steps you cannot do for them and must hand off: (a) grabbing cookies from `chat.line.biz` Chrome DevTools (instructions in "First-time setup"), (b) restarting the Claude session after `line-oa install-skill` so the companion skill loads. After the smoke test passes, tell them to start a new session and ask things like "show me waiting chats" — the skill takes over from there.
 
 ## Install
 
