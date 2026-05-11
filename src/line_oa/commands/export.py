@@ -7,18 +7,25 @@ from pathlib import Path
 
 from .. import config as cfgmod
 from ..client import iter_chats, make_client
-from ..errors import EXIT_OK, CliError, map_http_status
+from ..errors import EXIT_OK, EXIT_SESSION_EXPIRED, CliError, map_http_status
 
 
-def _download_chat_csv(client, bot_id: str, chat_id: str, tz_offset: int) -> str:
+def _download_chat_csv(client, bot_id: str, chat_id: str, tz_offset: int) -> str | None:
+    """Return CSV text, or None if this single chat failed (caller skips).
+    Raises CliError only on session-expired — remaining chats can't succeed."""
     url = f"/download/{bot_id}/{chat_id}/messages.csv"
     resp = client.get(url, params={"timezoneOffset": f"-{tz_offset}"})
-    if resp.status_code != 200:
+    if resp.status_code == 200:
+        return resp.text
+    code = map_http_status(resp.status_code)
+    if code == EXIT_SESSION_EXPIRED:
         raise CliError(
-            f"csv download failed for {chat_id}: {resp.status_code} {resp.text[:200]}",
-            code=map_http_status(resp.status_code),
+            f"session expired during export at {chat_id}; refresh cookies",
+            code=code,
         )
-    return resp.text
+    print(f"  [warn] {resp.status_code} {resp.text[:200]}",
+          file=sys.stderr, flush=True)
+    return None
 
 
 def run(args) -> int:
@@ -48,16 +55,25 @@ def run(args) -> int:
                 break
         print(f"found {len(chats)} chats", file=sys.stderr, flush=True)
 
+        failed = 0
         for i, chat in enumerate(chats, 1):
             chat_id = chat["chatId"]
             display = (chat.get("profile") or {}).get("name") or chat_id
             print(f"[{i}/{len(chats)}] {display} ({chat_id})", file=sys.stderr, flush=True)
             csv_text = _download_chat_csv(client, bot_id, chat_id, tz_offset)
+            if csv_text is None:
+                failed += 1
+                time.sleep(0.2)
+                continue
             chat_dir = output_dir / chat_id
             chat_dir.mkdir(parents=True, exist_ok=True)
             (chat_dir / "messages.csv").write_text(csv_text, encoding="utf-8")
             print(f"  saved {csv_text.count(chr(10))} lines", file=sys.stderr, flush=True)
             time.sleep(0.2)
 
-    print("done.", file=sys.stderr, flush=True)
+    exported = len(chats) - failed
+    summary = f"done. {exported}/{len(chats)} exported"
+    if failed:
+        summary += f" ({failed} failed — see warnings above)"
+    print(summary, file=sys.stderr, flush=True)
     return EXIT_OK
