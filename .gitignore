@@ -1,2 +1,8 @@
 config.json
-output/
+output*/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+.venv/

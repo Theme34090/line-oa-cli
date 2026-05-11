@@ -1,50 +1,108 @@
-# LINE OA Chat History Exporter
+# line-oa
 
-Export chat history from LINE Official Account (`chat.line.biz`) as CSV files.
+CLI for working with LINE Official Account customer-service chats from the terminal, designed to be used by Claude Code with a companion skill.
 
-Uses the per-chat `/download/{botId}/{chatId}/messages.csv` endpoint — same as the sidebar "Export Chat" button in the web UI, but automated for all chats.
+Talks to `chat.line.biz` (the OA web console) via cookie-scraped endpoints. The official LINE Messaging API does **not** expose historical chats, so cookie auth is forced. Sessions last ~24h; expect to re-paste a cURL once a day.
 
-## Setup
-
-1. Install [uv](https://docs.astral.sh/uv/)
-2. Copy `config.json.example` to `config.json` and fill in your cookies:
-
-```json
-{
-  "botId": "Uxxxxxxxxx",
-  "baseUrl": "https://chat.line.biz",
-  "timezoneOffset": 420,
-  "cookies": {
-    "__Host-chat-ses": "...",
-    "XSRF-TOKEN": "...",
-    "chat-device-group": "519",
-    "ses": "..."
-  }
-}
-```
-
-Get cookies from browser DevTools (Application > Cookies for `chat.line.biz`). Session expires ~24h.
-
-## Usage
+## Install
 
 ```bash
-# Export all chats
-uv run export.py
-
-# Last 7 days only
-uv run export.py --go-back-days 7
-
-# First 10 chats only
-uv run export.py --max-chats 10
-
-# Combine
-uv run export.py --go-back-days 1 --max-chats 100
+uv tool install git+https://github.com/Theme34090/line-oa-chat-exporter.git
 ```
 
-Output goes to `output/{chatId}/messages.csv`.
+This puts `line-oa` on your `PATH`.
 
-## Notes
+For local dev: `uv tool install --editable .`
 
-- Chat list API is limited to 25 per page — listing many chats takes time
-- CSV format is LINE's native export format (Thai headers, UTF-8 with BOM)
-- Script exits immediately if session cookies expire mid-run
+## First-time setup (3 commands)
+
+1. **Cookies.** Open `chat.line.biz` in Chrome. DevTools → Network → right-click any chat.line.biz request → Copy → Copy as cURL. Then:
+
+   ```bash
+   pbpaste | line-oa auth from-curl
+   ```
+
+   This writes cookies to `~/.config/line-oa/config.json` and prints the bot ID detected in the referer.
+
+2. **Register the OA.** Copy the printed bot ID and run:
+
+   ```bash
+   line-oa account add paypers U26397124b8700690b7331d7a16436277
+   ```
+
+3. **Smoke test:**
+
+   ```bash
+   line-oa list --limit 1
+   ```
+
+## Daily cookie refresh
+
+When commands start returning exit code 2 (session expired), paste a fresh cURL:
+
+```bash
+pbpaste | line-oa auth from-curl
+```
+
+## CLI surface
+
+| Command | Purpose |
+|---|---|
+| `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED]` | List chats |
+| `line-oa read CHAT_ID [--backward TOK] [--all]` | Read messages (newest first; `backward` token for older) |
+| `line-oa profile CHAT_ID` | Customer profile |
+| `line-oa send CHAT_ID TEXT [--dry-run] [--no-auto-manual] [--manual-ttl-minutes N]` | Send text reply (`TEXT="-"` reads stdin) |
+| `line-oa account list \| use NAME \| add NAME BOTID \| remove NAME` | OA registry |
+| `line-oa auth from-curl` | Refresh cookies (cURL on stdin) |
+| `line-oa auth status` | Check session |
+| `line-oa export` | Bulk-download all chats as CSV (LINE-native format) |
+| `line-oa install-skill` | Install the Claude Code skill to `~/.claude/skills/line-oa/` |
+
+All read/write verbs emit JSON to stdout. `--account NAME` overrides the current account on any command.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | ok |
+| 1 | generic error |
+| 2 | session expired — re-run `auth from-curl` |
+| 3 | chat not found |
+| 4 | rate limited |
+| 5 | no account selected |
+
+## Companion skill
+
+```bash
+line-oa install-skill
+```
+
+Copies `SKILL.md` to `~/.claude/skills/line-oa/`. Restart Claude Code (new session) for it to load. The skill describes the CLI to Claude and embeds guardrails for `send` (the only write verb).
+
+## Bulk export
+
+The original CSV export is still available:
+
+```bash
+line-oa export                          # all chats
+line-oa export --go-back-days 7         # last 7 days only
+line-oa export --max-chats 10           # first 10 chats only
+line-oa export --output-dir ./archive   # custom output
+```
+
+Output: `./output/{chatId}/messages.csv` (Thai headers, UTF-8 with BOM, matching LINE's native export).
+
+## Manual-mode side effect of `send`
+
+LINE OA chats default to auto/bot mode. The send endpoint rejects messages on auto-mode chats with `400 not_manual_chat_mode`. The web UI flips chats to manual implicitly when an agent starts typing — `line-oa send` does the same by PUTing `/useManualChat` first.
+
+- Default TTL: **60 minutes** in manual mode (matches the UI default). Auto-reverts after expiry.
+- Override TTL: `--manual-ttl-minutes 30`.
+- Opt out: `--no-auto-manual`. Sends will fail unless the chat is already manual.
+
+During the manual window, the OA's automated responses are paused for that chat. Sending again extends the window.
+
+## Known limitations
+
+- **One OA login at a time.** Cookies are shared across all configured accounts. Switching LINE Business logins replaces cookies for every account.
+- **`x-oa-chat-client-version` header is hardcoded** (`20240513144702`). When LINE bumps this, requests may start 4xx-ing in unfamiliar ways. Look here first.
