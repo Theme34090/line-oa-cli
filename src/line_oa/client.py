@@ -86,7 +86,7 @@ def fetch_search_page(
     Returns the raw {list, next, total} blob. `target_type` is the friendly
     name; mapped to LINE's searchTargetType (MESSAGE | CHAT_PROFILE)."""
     api_target = SEARCH_TARGET_TYPES[target_type]
-    params: dict[str, object] = {
+    params: dict[str, Any] = {
         "query": query,
         "searchTargetType": api_target,
         "limit": page_size,

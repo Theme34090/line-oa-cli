@@ -101,7 +101,6 @@ def run(args) -> int:
         all_hits: list = []
         total: int | None = None
         next_cursor: str | None = args.next
-        capped = False
         while True:
             data = fetch_search_page(
                 client, bot_id, args.query,
@@ -117,13 +116,8 @@ def run(args) -> int:
             if not next_cursor or not page:
                 break
             if len(all_hits) >= MAX_ALL_HITS:
-                capped = True
                 break
             time.sleep(0.2)
-
-        if len(all_hits) > MAX_ALL_HITS:
-            all_hits = all_hits[:MAX_ALL_HITS]
-            capped = True
 
         hits = all_hits if args.raw else [_curate_hit(h, bot_id) for h in all_hits]
         emit_json({
@@ -132,8 +126,8 @@ def run(args) -> int:
             "type": args.type,
             "count": len(hits),
             "total": total,
-            "next": next_cursor if capped else None,
-            "capped": capped,
+            "next": next_cursor,
+            "capped": len(all_hits) >= MAX_ALL_HITS,
             "hits": hits,
         })
         return EXIT_OK
