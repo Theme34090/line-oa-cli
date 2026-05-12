@@ -9,7 +9,7 @@ Talks to `chat.line.biz` (the OA web console) via cookie-scraped endpoints. The 
 ## Install
 
 ```bash
-uv tool install git+https://github.com/Theme34090/line-oa-chat-exporter.git
+uv tool install git+https://github.com/Theme34090/line-oa-cli.git
 ```
 
 This puts `line-oa` on your `PATH`.

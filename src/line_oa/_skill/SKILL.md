@@ -82,7 +82,7 @@ Rules:
 
 Walk the user through one step at a time. Don't run all in one Bash call — let each succeed first.
 
-1. Install: `uv tool install git+https://github.com/Theme34090/line-oa-chat-exporter.git`
+1. Install: `uv tool install git+https://github.com/Theme34090/line-oa-cli.git`
 2. Get a cURL: chat.line.biz → DevTools → Network → right-click any request → Copy → Copy as cURL. Then `pbpaste | line-oa auth from-curl`.
 3. From step 2 output, copy the printed `botId`. Then `line-oa account add <chosen-alias> <botId>`.
 4. Smoke: `line-oa list --limit 1`.
