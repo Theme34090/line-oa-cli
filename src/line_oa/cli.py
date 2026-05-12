@@ -6,7 +6,7 @@ from pathlib import Path
 
 from . import __version__
 from .commands import content as content_cmd
-from .commands import list_chats, profile, read, send
+from .commands import list_chats, profile, read, search, send
 from .errors import CliError, EXIT_GENERIC
 
 
@@ -83,6 +83,27 @@ def build_parser() -> argparse.ArgumentParser:
     ps.add_argument("--raw", action="store_true",
                     help="Emit the full LINE API response and HTTP status")
 
+    # search
+    psr = sub.add_parser(
+        "search",
+        help="Search chats by message text or customer name",
+        description="Search across all chats for a keyword in message text "
+                    "(default) or in customer display names.",
+        epilog=search.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    psr.add_argument("query", help="Search query (URL-encoded automatically)")
+    psr.add_argument("--type", default="message", choices=["message", "profile"],
+                     help="What to match against (default: message)")
+    psr.add_argument("--limit", type=int, default=25,
+                     help="Page size (default 25, LINE's natural max)")
+    psr.add_argument("--all", dest="fetch_all", action="store_true",
+                     help="Paginate until exhausted (capped at 500 hits)")
+    psr.add_argument("--next", default=None,
+                     help="Resume from a pagination cursor")
+    psr.add_argument("--raw", action="store_true",
+                     help="Emit the full LINE response instead of the curated shape")
+
     # content
     pc = sub.add_parser(
         "content",
@@ -144,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         "read": read.run,
         "profile": profile.run,
         "send": send.run,
+        "search": search.run,
         "content": content_cmd.run,
         "account": account.run,
         "auth": auth.run,

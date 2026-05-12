@@ -27,6 +27,7 @@ Rules:
 |---|---|
 | `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED] [--raw]` | List chats |
 | `line-oa read CHAT_ID [--backward TOK] [--all] [--raw]` | Read messages, newest first |
+| `line-oa search QUERY [--type message\|profile] [--limit N] [--all] [--next TOK] [--raw]` | Search chats by message text or customer name |
 | `line-oa profile CHAT_ID [--raw]` | Customer profile |
 | `line-oa send CHAT_ID TEXT [--dry-run] [--manual-ttl-minutes N] [--raw]` | Send text reply (TEXT="-" reads stdin). Auto-flips chat to manual mode. |
 | `line-oa content CONTENT_HASH [--out PATH] [--no-cache]` | Download a chat attachment (image/video/audio/file) and cache it locally |
@@ -46,6 +47,8 @@ Curated shapes (default) are stable and CS-focused: `chatId`, `name`, `unread`, 
 - `"customer"` — the customer sent it
 - `"manual"` — a human OA operator sent it (web console or CLI)
 - `"automated"` — the OA's auto-response sent it (LINE bizId `__AUTO_RESPONSE`)
+
+To find chats mentioning a keyword (e.g. "who asked about feature X"), use `line-oa search QUERY` instead of iterating `line-oa list` and reading every chat. The API returns hits as chat objects with a `foundMessagesCount` — it does NOT return the matching message text. If you need to see what was actually said, `read` the hit chats and grep client-side; budget accordingly before doing this for many hits.
 
 Pass `--raw` only when the curated shape lacks a field you need (e.g. delivery-receipt timestamps `userLastReadAt`, tags, mute state, quote tokens). Defaulting to `--raw` is wasteful — it adds ~15 noisy fields per chat to your context.
 
@@ -92,7 +95,7 @@ When commands start returning exit 2: `pbpaste | line-oa auth from-curl`. Tell t
 
 - Don't volunteer to send unprompted ("would you like me to reply?"). CS initiates.
 - Don't loop over many chats and call `send`. Bulk-send is not in v1.
-- Don't claim a feature exists if it's not in the surface above. Tag/note/assign/search are not built — say so and offer to file it as a feature request.
+- Don't claim a feature exists if it's not in the surface above. Tag/note/assign are not built — say so and offer to file it as a feature request.
 - Don't dump raw JSON to the user. Summarize; offer JSON on request.
 - Don't fabricate facts about a customer beyond what `read` and `profile` returned.
 
@@ -104,6 +107,7 @@ The user can add this to `~/.claude/settings.json` to skip prompts on read-only 
 { "permissions": { "allow": [
   "Bash(line-oa list:*)",
   "Bash(line-oa read:*)",
+  "Bash(line-oa search:*)",
   "Bash(line-oa profile:*)",
   "Bash(line-oa account list:*)",
   "Bash(line-oa account use:*)",

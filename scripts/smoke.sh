@@ -169,6 +169,56 @@ else
     SKIP=$((SKIP+1))
 fi
 
+heading "Search"
+check "search --type profile 'Theme'" 0 line-oa search "$EXPECTED_NAME" --type profile --limit 5
+PROFILE_HIT_NAMES=$(line-oa search "$EXPECTED_NAME" --type profile --limit 5 2>/dev/null | python3 -c "
+import json, sys
+hits = json.load(sys.stdin).get('hits', [])
+print(','.join(h.get('name','') for h in hits))
+")
+case ",$PROFILE_HIT_NAMES," in
+    *",$EXPECTED_NAME,"*)
+        green "profile search returns '$EXPECTED_NAME' in hits"
+        PASS=$((PASS+1))
+        ;;
+    *)
+        red "profile search missing '$EXPECTED_NAME'. got: $PROFILE_HIT_NAMES"
+        FAIL=$((FAIL+1))
+        ;;
+esac
+
+MSG_QUERY="smoke test from line-oa CLI"
+check "search --type message '$MSG_QUERY'" 0 line-oa search "$MSG_QUERY" --type message --limit 5
+MSG_HIT_NAMES=$(line-oa search "$MSG_QUERY" --type message --limit 5 2>/dev/null | python3 -c "
+import json, sys
+hits = json.load(sys.stdin).get('hits', [])
+print(','.join(h.get('name','') for h in hits))
+")
+case ",$MSG_HIT_NAMES," in
+    *",$EXPECTED_NAME,"*)
+        green "message search returns '$EXPECTED_NAME' in hits"
+        PASS=$((PASS+1))
+        ;;
+    *)
+        red "message search missing '$EXPECTED_NAME'. got: $MSG_HIT_NAMES"
+        FAIL=$((FAIL+1))
+        ;;
+esac
+
+SEARCH_KEYS=$(line-oa search "$EXPECTED_NAME" --type profile --limit 1 2>/dev/null | python3 -c "
+import json, sys
+hits = json.load(sys.stdin).get('hits', [])
+print(','.join(sorted(hits[0].keys())) if hits else '')
+")
+EXPECTED_SEARCH_KEYS="chatId,done,followedUp,foundMessagesCount,lastReceivedAt,latest,name,unread"
+if [ "$SEARCH_KEYS" = "$EXPECTED_SEARCH_KEYS" ]; then
+    green "search curated hit keys exactly: $EXPECTED_SEARCH_KEYS"
+    PASS=$((PASS+1))
+else
+    red "search curated keys drifted. expected '$EXPECTED_SEARCH_KEYS', got '$SEARCH_KEYS'"
+    FAIL=$((FAIL+1))
+fi
+
 heading "Send (dry-run only — real sends not tested here)"
 check "send --dry-run (auto-manual)" 0 line-oa send "$TEST_CHAT" "smoke" --dry-run
 check "send --dry-run --no-auto-manual" 0 line-oa send "$TEST_CHAT" "smoke" --dry-run --no-auto-manual

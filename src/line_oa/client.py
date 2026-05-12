@@ -66,6 +66,42 @@ def fetch_content(
     return resp.content, resp.headers.get("content-type", "application/octet-stream")
 
 
+SEARCH_TARGET_TYPES = {
+    "message": "MESSAGE",
+    "profile": "CHAT_PROFILE",
+}
+
+
+def fetch_search_page(
+    client: httpx.Client,
+    bot_id: str,
+    query: str,
+    *,
+    target_type: str = "message",
+    page_size: int = CHAT_LIST_PAGE_SIZE,
+    next_cursor: str | None = None,
+) -> dict:
+    """Fetch one page of /api/v1/bots/{bot}/chats/search.
+
+    Returns the raw {list, next, total} blob. `target_type` is the friendly
+    name; mapped to LINE's searchTargetType (MESSAGE | CHAT_PROFILE)."""
+    api_target = SEARCH_TARGET_TYPES[target_type]
+    params: dict[str, object] = {
+        "query": query,
+        "searchTargetType": api_target,
+        "limit": page_size,
+    }
+    if next_cursor:
+        params["next"] = next_cursor
+    resp = client.get(f"/api/v1/bots/{bot_id}/chats/search", params=params)
+    if resp.status_code != 200:
+        raise CliError(
+            f"search failed: {resp.status_code} {resp.text[:200]}",
+            code=map_http_status(resp.status_code),
+        )
+    return resp.json()
+
+
 def iter_chats(
     client: httpx.Client,
     bot_id: str,
