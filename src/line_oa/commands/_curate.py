@@ -107,9 +107,8 @@ def curate_tag(t: dict) -> dict:
 def curate_note(n: dict) -> dict:
     """Project a raw LINE note blob to the lean shape.
 
-    Renames noteId→id and userBizId→authorId; keeps body and timestamps.
-    `authorId` is the OA staff member's UUID — there's no display-name
-    lookup endpoint, so it's surfaced as-is for multi-staff inboxes."""
+    `authorId` (LINE's `userBizId`) is the OA staff member's UUID —
+    no display-name endpoint exists, so it's surfaced as-is."""
     return {
         "id": n.get("noteId"),
         "body": n.get("body"),

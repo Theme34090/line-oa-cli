@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-
 from .. import config as cfgmod
 from ..client import make_client, write_headers
 from ..errors import (
@@ -11,6 +9,7 @@ from ..errors import (
     map_http_status,
 )
 from ._curate import curate_note
+from ._io import read_text_or_stdin
 
 
 EPILOG = """\
@@ -55,12 +54,6 @@ Caveats:
 """
 
 
-def _read_body(arg: str) -> str:
-    if arg == "-":
-        return sys.stdin.read().rstrip("\n")
-    return arg
-
-
 def _notes_url(bot_id: str, chat_id: str, note_id: str | None = None) -> str:
     base = f"/api/v1/bots/{bot_id}/chats/{chat_id}/notes"
     return f"{base}/{note_id}" if note_id else base
@@ -91,7 +84,7 @@ def cmd_list(args) -> int:
 
 
 def cmd_add(args) -> int:
-    body = _read_body(args.body)
+    body = read_text_or_stdin(args.body)
     if not body.strip():
         raise CliError("refusing to create an empty/whitespace note")
 
@@ -120,7 +113,7 @@ def cmd_add(args) -> int:
 
 
 def cmd_edit(args) -> int:
-    body = _read_body(args.body)
+    body = read_text_or_stdin(args.body)
     if not body.strip():
         raise CliError("refusing to edit a note to empty/whitespace body")
 

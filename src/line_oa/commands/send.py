@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import random
-import sys
 import time
 
 from .. import config as cfgmod
@@ -12,6 +11,7 @@ from ..errors import (
     emit_json,
     map_http_status,
 )
+from ._io import read_text_or_stdin
 
 
 EPILOG = """\
@@ -44,12 +44,6 @@ def _make_send_id(chat_id: str) -> str:
     return f"{chat_id}_{ms}_{nonce:08d}"
 
 
-def _read_text(arg: str) -> str:
-    if arg == "-":
-        return sys.stdin.read().rstrip("\n")
-    return arg
-
-
 def _use_manual_chat(client, url: str, expires_at: int,
                      headers: dict[str, str]) -> None:
     resp = client.put(url, json={"expiresAt": expires_at}, headers=headers)
@@ -64,7 +58,7 @@ def run(args) -> int:
     cfg = cfgmod.load(args.config)
     name, bot_id = cfgmod.resolve_account(cfg, args.account)
 
-    text = _read_text(args.text)
+    text = read_text_or_stdin(args.text)
     if not text.strip():
         raise CliError("refusing to send empty/whitespace text")
 
