@@ -225,6 +225,12 @@ SMOKE_TAG="_smoke_lifecycle"
 line-oa tag delete "$SMOKE_TAG" --yes >/dev/null 2>&1 || true
 
 check "tag list" 0 line-oa tag list
+check "tag get" 0 line-oa tag get "$TEST_CHAT"
+check "tag create (new)" 0 line-oa tag create "$SMOKE_TAG"
+
+# Curated-shape assertion runs after `tag create` so the catalog is
+# guaranteed non-empty even on a fresh OA (otherwise tags[0] is missing
+# and the assertion falsely fails).
 TAG_LIST_KEYS=$(line-oa tag list 2>/dev/null | python3 -c "
 import json, sys
 tags = json.load(sys.stdin).get('tags', [])
@@ -237,9 +243,6 @@ else
     red "tag list curated keys drifted. expected 'id,name', got '$TAG_LIST_KEYS'"
     FAIL=$((FAIL+1))
 fi
-
-check "tag get" 0 line-oa tag get "$TEST_CHAT"
-check "tag create (new)" 0 line-oa tag create "$SMOKE_TAG"
 CREATED=$(line-oa tag create "$SMOKE_TAG" 2>/dev/null | python3 -c "
 import json, sys
 print(json.load(sys.stdin).get('created'))
@@ -274,6 +277,8 @@ check "tag delete --yes" 0 line-oa tag delete "$SMOKE_TAG" --yes
 
 check "tag add unknown name => exit 1" 1 line-oa tag add "$TEST_CHAT" "_definitely_not_a_real_tag"
 check "tag set with no args => exit 1" 1 line-oa tag set "$TEST_CHAT"
+check "tag add with no args => exit 1" 1 line-oa tag add "$TEST_CHAT"
+check "tag remove with no args => exit 1" 1 line-oa tag remove "$TEST_CHAT"
 
 # --tag filter on list. Picks the most-used tag in the catalog as the
 # probe (some OAs have no chats with any one specific tag).

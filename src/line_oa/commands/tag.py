@@ -295,6 +295,12 @@ def cmd_set(args) -> int:
 
 
 def cmd_add(args) -> int:
+    if not args.tags:
+        raise CliError(
+            "no tags supplied to `tag add`. Pass one or more tag names "
+            "(or IDs with --id).",
+        )
+
     cfg = cfgmod.load(args.config)
     name, bot_id = cfgmod.resolve_account(cfg, args.account)
     base = cfg.get("baseUrl", "https://chat.line.biz")
@@ -314,6 +320,12 @@ def cmd_add(args) -> int:
 
 
 def cmd_remove(args) -> int:
+    if not args.tags:
+        raise CliError(
+            "no tags supplied to `tag remove`. Pass one or more tag names "
+            "(or IDs with --id); use `tag clear` to remove all tags.",
+        )
+
     cfg = cfgmod.load(args.config)
     name, bot_id = cfgmod.resolve_account(cfg, args.account)
     base = cfg.get("baseUrl", "https://chat.line.biz")
