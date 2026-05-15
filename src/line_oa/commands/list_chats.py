@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone, timedelta
 
 from .. import config as cfgmod
-from ..client import fetch_tag_catalog, iter_chats, make_client, resolve_tag_names
-from ..errors import CliError, EXIT_GENERIC, EXIT_OK, emit_json
-from ._curate import curate_chat, derive_from
+from ..client import fetch_tag_catalog, iter_chats, make_client, resolve_tag_args
+from ..errors import EXIT_OK, emit_json
+from ._curate import curate_chat, derive_from, tag_id_to_name
 
 
 EPILOG = """\
@@ -75,32 +74,20 @@ def run(args) -> int:
     catalog: list[dict] | None = None
 
     with make_client(cfg, bot_id) as client:
-        # Curated mode and/or --tag both need the catalog. Fetch once,
-        # reuse for filter resolution and ID→name enrichment.
-        if not args.raw or args.tag is not None:
+        # Curated mode needs the catalog for name enrichment; --tag NAME
+        # needs it for filter resolution (skipped when --tag-by-id).
+        need_catalog = (
+            not args.raw
+            or (args.tag is not None and not args.tag_by_id)
+        )
+        if need_catalog:
             catalog = fetch_tag_catalog(client, bot_id)
 
         tag_id_filter: str | None = None
         if args.tag is not None:
-            if args.tag_by_id:
-                tag_id_filter = args.tag
-            else:
-                resolved, unresolved = resolve_tag_names(catalog or [], [args.tag])
-                if unresolved:
-                    payload = {
-                        "error": "tag_not_found",
-                        "requested": [args.tag],
-                        "unresolved": unresolved,
-                        "available": [
-                            {"id": t.get("tagId"), "name": t.get("name")}
-                            for t in (catalog or [])
-                        ],
-                    }
-                    raise CliError(
-                        json.dumps(payload, ensure_ascii=False),
-                        code=EXIT_GENERIC,
-                    )
-                tag_id_filter = resolved[0]
+            tag_id_filter = resolve_tag_args(
+                catalog or [], [args.tag], by_id=args.tag_by_id,
+            )[0]
 
         for chat in iter_chats(client, bot_id, folder=args.folder, tag_ids=tag_id_filter):
             if cutoff_ms is not None and chat.get("updatedAt", 0) < cutoff_ms:
@@ -112,7 +99,7 @@ def run(args) -> int:
                 break
 
     if not args.raw:
-        id_to_name = {t["tagId"]: t["name"] for t in (catalog or [])}
+        id_to_name = tag_id_to_name(catalog or [])
         collected = [
             curate_chat(c, bot_id, tag_id_to_name=id_to_name)
             for c in collected

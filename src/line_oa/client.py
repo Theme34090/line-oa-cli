@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 from typing import Any, Iterator
 
@@ -143,6 +144,37 @@ def iter_chats(
         time.sleep(sleep_seconds)
 
 
+def fetch_chat(client: httpx.Client, bot_id: str, chat_id: str) -> dict:
+    """GET /api/v1/bots/{bot}/chats/{chat}. Returns the full LINE chat-metadata
+    blob — profile, tagIds, autoTagIds, latestEvent, etc."""
+    resp = client.get(f"/api/v1/bots/{bot_id}/chats/{chat_id}")
+    if resp.status_code != 200:
+        raise CliError(
+            f"chat fetch failed: {resp.status_code} {resp.text[:200]}",
+            code=map_http_status(resp.status_code),
+        )
+    return resp.json()
+
+
+def write_headers(
+    base: str, bot_id: str, *, chat_id: str | None = None,
+) -> dict[str, str]:
+    """Headers required for mutating endpoints (PUT/POST/DELETE).
+
+    `chat_id` controls the Referer: a chat ID yields `/<bot>/chat/<chat>`
+    (per-chat ops like send / tag-assignment); omitting it yields
+    `/<bot>/settings/tags` (catalog ops)."""
+    referer = (
+        f"{base}/{bot_id}/chat/{chat_id}" if chat_id
+        else f"{base}/{bot_id}/settings/tags"
+    )
+    return {
+        "Content-Type": "application/json",
+        "Origin": base,
+        "Referer": referer,
+    }
+
+
 def fetch_tag_catalog(client: httpx.Client, bot_id: str) -> list[dict]:
     """GET /api/v1/bots/{bot}/tags. Returns the full LINE tag list:
     [{"tagId", "name", "count", "createdAt", "updatedAt"}, ...].
@@ -175,3 +207,33 @@ def resolve_tag_names(
         else:
             resolved.append(tid)
     return resolved, unresolved
+
+
+def resolve_tag_args(
+    catalog: list[dict],
+    inputs: list[str],
+    *,
+    by_id: bool,
+) -> list[str]:
+    """Resolve a list of tag args (names or IDs) to IDs, atomic-or-fail.
+
+    `by_id=True`: treat inputs as IDs verbatim; no catalog lookup, no
+    validation. The caller takes responsibility.
+    `by_id=False`: resolve names against the catalog. On any miss,
+    raise a CliError with a JSON payload embedding the full catalog so
+    an agent caller can self-correct in one turn.
+    """
+    if by_id:
+        return list(inputs)
+    resolved, unresolved = resolve_tag_names(catalog, inputs)
+    if unresolved:
+        payload = {
+            "error": "tag_not_found",
+            "requested": list(inputs),
+            "unresolved": unresolved,
+            "available": [
+                {"id": t.get("tagId"), "name": t.get("name")} for t in catalog
+            ],
+        }
+        raise CliError(json.dumps(payload, ensure_ascii=False))
+    return resolved

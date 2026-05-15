@@ -18,7 +18,8 @@ from line_oa.commands._curate import (
 from line_oa.commands.auth import _parse_curl
 from line_oa.commands.list_chats import _is_waiting
 from line_oa.commands.send import _make_send_id
-from line_oa.commands.tag import _curate_tag, _ids_to_names, _mutation_response
+from line_oa.commands._curate import curate_tag, ids_to_names
+from line_oa.commands.tag import _mutation_response
 from line_oa.errors import EXIT_NO_ACCOUNT, CliError
 
 SAMPLE_BOT = "U26397124b8700690b7331d7a16436277"
@@ -516,11 +517,11 @@ class TagCurationTests(unittest.TestCase):
             "tagId": "id-1", "name": "vip",
             "count": 7, "createdAt": 1, "updatedAt": 2,
         }
-        self.assertEqual(_curate_tag(raw), {"id": "id-1", "name": "vip"})
+        self.assertEqual(curate_tag(raw), {"id": "id-1", "name": "vip"})
 
     def test_ids_to_names_unknown_falls_back_to_id(self):
         catalog = [{"tagId": "a", "name": "alpha"}]
-        self.assertEqual(_ids_to_names(catalog, ["a", "b"]), ["alpha", "b"])
+        self.assertEqual(ids_to_names(catalog, ["a", "b"]), ["alpha", "b"])
 
 
 class MutationResponseTests(unittest.TestCase):

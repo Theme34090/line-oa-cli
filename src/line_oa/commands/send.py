@@ -5,7 +5,7 @@ import sys
 import time
 
 from .. import config as cfgmod
-from ..client import make_client
+from ..client import make_client, write_headers
 from ..errors import (
     CliError,
     EXIT_OK,
@@ -42,15 +42,6 @@ def _make_send_id(chat_id: str) -> str:
     ms = int(time.time() * 1000)
     nonce = random.randint(0, 99_999_999)
     return f"{chat_id}_{ms}_{nonce:08d}"
-
-
-def _write_headers(base: str, bot_id: str, chat_id: str) -> dict[str, str]:
-    """Headers required for mutating chat endpoints (PUT, POST)."""
-    return {
-        "Content-Type": "application/json",
-        "Origin": base,
-        "Referer": f"{base}/{bot_id}/chat/{chat_id}",
-    }
 
 
 def _read_text(arg: str) -> str:
@@ -101,7 +92,7 @@ def run(args) -> int:
         return EXIT_OK
 
     manual_info = None
-    headers = _write_headers(base, bot_id, args.chat_id)
+    headers = write_headers(base, bot_id, chat_id=args.chat_id)
     with make_client(cfg, bot_id) as client:
         if auto_manual:
             _use_manual_chat(client, manual_url, expires_at, headers)

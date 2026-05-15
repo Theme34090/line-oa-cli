@@ -99,6 +99,23 @@ def curate_chat(
     return out
 
 
+def curate_tag(t: dict) -> dict:
+    """Project a raw LINE tag blob ({tagId, name, count, ...}) to {id, name}."""
+    return {"id": t.get("tagId"), "name": t.get("name")}
+
+
+def tag_id_to_name(catalog: list[dict]) -> dict[str, str]:
+    """Build an ID→name lookup from a tag catalog."""
+    return {t["tagId"]: t["name"] for t in catalog}
+
+
+def ids_to_names(catalog: list[dict], ids: list[str]) -> list[str]:
+    """Look up names for a list of IDs. Unknown IDs render as the raw ID
+    string so nothing silently disappears."""
+    by_id = tag_id_to_name(catalog)
+    return [by_id.get(i, i) for i in ids]
+
+
 def curate_profile(chat_data: dict) -> dict:
     """Project LINE's chat-metadata blob to the customer-identity slice."""
     profile = chat_data.get("profile") or {}
