@@ -217,8 +217,6 @@ def build_parser() -> argparse.ArgumentParser:
                         help="Note ID (from `line-oa notes list CHATID`)")
     pn_del.add_argument("--yes", action="store_true",
                         help="Confirm the delete; required for safety")
-    pn_del.add_argument("--raw", action="store_true",
-                        help="Emit the full LINE response")
 
     # account group
     pa = sub.add_parser("account", help="Manage OA accounts")

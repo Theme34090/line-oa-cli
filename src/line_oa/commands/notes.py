@@ -33,7 +33,8 @@ Note identity:
   agpcwqa5srd2efuudvb6bfbmai). There is no human-readable name.
   Run `line-oa notes list CHATID` first to discover IDs.
 
-Curated output shapes (use --raw for LINE's verbatim response):
+Curated output shapes (list/add/edit accept --raw for LINE's
+verbatim response; delete has no body so no --raw mode):
 
   list:   {account, chatId, count, notes: [Note, ...]}
   add:    {account, chatId, note: Note}
