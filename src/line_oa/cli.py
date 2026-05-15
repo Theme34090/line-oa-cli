@@ -7,6 +7,7 @@ from pathlib import Path
 from . import __version__
 from .commands import content as content_cmd
 from .commands import list_chats, profile, read, search, send
+from .commands import notes as notes_cmd
 from .commands import tag as tag_cmd
 from .errors import CliError, EXIT_GENERIC
 
@@ -173,6 +174,52 @@ def build_parser() -> argparse.ArgumentParser:
     pt_clear = pt_sub.add_parser("clear", help="Remove ALL tags from a chat")
     pt_clear.add_argument("chat_id")
 
+    # notes group
+    pn = sub.add_parser(
+        "notes",
+        help="Manage per-chat notes (CS scratchpad)",
+        description="Per-chat free-form text notes (list/add/edit/delete). "
+                    "Notes are addressed by raw note ID; run `notes list` "
+                    "first to discover IDs.",
+        epilog=notes_cmd.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pn_sub = pn.add_subparsers(dest="notes_cmd", required=True)
+
+    pn_list = pn_sub.add_parser("list", help="List all notes on a chat")
+    pn_list.add_argument("chat_id")
+    pn_list.add_argument("--raw", action="store_true",
+                         help="Emit the full LINE response")
+
+    pn_add = pn_sub.add_parser(
+        "add", help="Create a new note (returns the new note id)",
+    )
+    pn_add.add_argument("chat_id")
+    pn_add.add_argument("body", help='Note body, or "-" to read from stdin')
+    pn_add.add_argument("--raw", action="store_true",
+                        help="Emit the full LINE response")
+
+    pn_edit = pn_sub.add_parser(
+        "edit", help="Replace a note's body (note id from `notes list`)",
+    )
+    pn_edit.add_argument("chat_id")
+    pn_edit.add_argument("note_id",
+                         help="Note ID (from `line-oa notes list CHATID`)")
+    pn_edit.add_argument("body", help='New body, or "-" to read from stdin')
+    pn_edit.add_argument("--raw", action="store_true",
+                         help="Emit the full LINE response")
+
+    pn_del = pn_sub.add_parser(
+        "delete", help="Delete a note (destructive; --yes required)",
+    )
+    pn_del.add_argument("chat_id")
+    pn_del.add_argument("note_id",
+                        help="Note ID (from `line-oa notes list CHATID`)")
+    pn_del.add_argument("--yes", action="store_true",
+                        help="Confirm the delete; required for safety")
+    pn_del.add_argument("--raw", action="store_true",
+                        help="Emit the full LINE response")
+
     # account group
     pa = sub.add_parser("account", help="Manage OA accounts")
     pa_sub = pa.add_subparsers(dest="account_cmd", required=True)
@@ -222,6 +269,7 @@ def main(argv: list[str] | None = None) -> int:
         "search": search.run,
         "content": content_cmd.run,
         "tag": tag_cmd.run,
+        "notes": notes_cmd.run,
         "account": account.run,
         "auth": auth.run,
         "export": export.run,

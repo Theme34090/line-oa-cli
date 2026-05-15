@@ -18,7 +18,7 @@ from line_oa.commands._curate import (
 from line_oa.commands.auth import _parse_curl
 from line_oa.commands.list_chats import _is_waiting
 from line_oa.commands.send import _make_send_id
-from line_oa.commands._curate import curate_tag, ids_to_names
+from line_oa.commands._curate import curate_note, curate_tag, ids_to_names
 from line_oa.commands.tag import _mutation_response
 from line_oa.errors import EXIT_NO_ACCOUNT, CliError
 
@@ -522,6 +522,30 @@ class TagCurationTests(unittest.TestCase):
     def test_ids_to_names_unknown_falls_back_to_id(self):
         catalog = [{"tagId": "a", "name": "alpha"}]
         self.assertEqual(ids_to_names(catalog, ["a", "b"]), ["alpha", "b"])
+
+
+class NoteCurationTests(unittest.TestCase):
+    def test_curate_note_renames_fields(self):
+        raw = {
+            "noteId": "n-1",
+            "body": "follow up Tue",
+            "userBizId": "fee7f450-uuid",
+            "createdAt": 1778849144704,
+            "updatedAt": 1778849161523,
+        }
+        self.assertEqual(curate_note(raw), {
+            "id": "n-1",
+            "body": "follow up Tue",
+            "authorId": "fee7f450-uuid",
+            "createdAt": 1778849144704,
+            "updatedAt": 1778849161523,
+        })
+
+    def test_curate_note_missing_fields_yield_none(self):
+        self.assertEqual(curate_note({}), {
+            "id": None, "body": None, "authorId": None,
+            "createdAt": None, "updatedAt": None,
+        })
 
 
 class MutationResponseTests(unittest.TestCase):

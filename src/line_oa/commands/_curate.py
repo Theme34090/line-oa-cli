@@ -104,6 +104,21 @@ def curate_tag(t: dict) -> dict:
     return {"id": t.get("tagId"), "name": t.get("name")}
 
 
+def curate_note(n: dict) -> dict:
+    """Project a raw LINE note blob to the lean shape.
+
+    Renames noteId→id and userBizId→authorId; keeps body and timestamps.
+    `authorId` is the OA staff member's UUID — there's no display-name
+    lookup endpoint, so it's surfaced as-is for multi-staff inboxes."""
+    return {
+        "id": n.get("noteId"),
+        "body": n.get("body"),
+        "authorId": n.get("userBizId"),
+        "createdAt": n.get("createdAt"),
+        "updatedAt": n.get("updatedAt"),
+    }
+
+
 def tag_id_to_name(catalog: list[dict]) -> dict[str, str]:
     """Build an ID→name lookup from a tag catalog."""
     return {t["tagId"]: t["name"] for t in catalog}

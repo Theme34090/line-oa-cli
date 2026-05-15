@@ -33,6 +33,7 @@ Rules:
 | `line-oa content CONTENT_HASH [--out PATH] [--no-cache]` | Download a chat attachment (image/video/audio/file) and cache it locally |
 | `line-oa tag list \| get CHAT_ID \| create NAME \| delete NAME --yes` | Tag catalog ops |
 | `line-oa tag set\|add\|remove CHAT_ID NAME... \| clear CHAT_ID` | Per-chat tag assignment (idempotent; returns before/after) |
+| `line-oa notes list CHAT_ID \| add CHAT_ID BODY \| edit CHAT_ID NOTE_ID BODY \| delete CHAT_ID NOTE_ID --yes` | Per-chat notes (CS scratchpad). BODY="-" reads stdin. |
 | `line-oa account list \| use NAME \| add NAME BOTID \| remove NAME` | OA registry |
 | `line-oa auth from-curl` | Refresh cookies (cURL on stdin) |
 | `line-oa auth status` | Check session is alive |
@@ -82,6 +83,21 @@ Tags are passed by **name** by default. Names with spaces need shell quoting (`t
 
 `tag delete` deserves the same human-confirmation treatment as `send` — confirm in plain words before running it. Don't auto-create tags; if the user mentions a tag that doesn't exist, ask whether they want it created first.
 
+## Notes
+
+Per-chat free-form text scratchpads — CS context that isn't a tag and isn't a message. Examples: "prefers email", "VIP — escalate to Mgr", "follow up Tue re shipping address".
+
+- `line-oa notes list CHAT_ID` shows all notes on a chat as `[{id, body, authorId, createdAt, updatedAt}]`. Notes do not appear in `read`, `list`, or `profile` — you must ask for them. **Read notes before drafting a reply** if the chat has any; they may carry instructions ("don't quote this customer the standard rate") the message history won't show.
+- `line-oa notes add CHAT_ID BODY` creates one. `BODY="-"` reads stdin — use it for multi-line notes (`pbpaste | line-oa notes add U... -`).
+- `line-oa notes edit CHAT_ID NOTE_ID BODY` replaces the body.
+- `line-oa notes delete CHAT_ID NOTE_ID --yes` deletes (irreversible; `--yes` required).
+
+Note IDs are opaque (~26 base32 chars). There's no name, no index, no substring matcher — **always run `notes list` first** to get the ID before edit/delete. `edit` on a stale ID errors out (LINE returns 400, surfaced as exit 1); `delete` is idempotent server-side (LINE returns 200 even if the note is gone), so a stale delete-ID looks like success.
+
+`authorId` is the OA staff member's UUID; there's no display-name lookup. It's only useful for telling notes from different staff members apart in a multi-staff inbox.
+
+`notes delete` deserves the same human-confirmation treatment as `send` and `tag delete` — confirm in plain words before running it.
+
 ## Exit codes — handle these distinctly
 
 | Code | What it means | What to do |
@@ -110,7 +126,7 @@ When commands start returning exit 2: `pbpaste | line-oa auth from-curl`. Tell t
 
 - Don't volunteer to send unprompted ("would you like me to reply?"). CS initiates.
 - Don't loop over many chats and call `send`. Bulk-send is not in v1.
-- Don't claim a feature exists if it's not in the surface above. Note/assign are not built — say so and offer to file it as a feature request.
+- Don't claim a feature exists if it's not in the surface above. Assignment is not built — say so and offer to file it as a feature request.
 - Don't dump raw JSON to the user. Summarize; offer JSON on request.
 - Don't fabricate facts about a customer beyond what `read` and `profile` returned.
 
@@ -126,10 +142,11 @@ The user can add this to `~/.claude/settings.json` to skip prompts on read-only 
   "Bash(line-oa profile:*)",
   "Bash(line-oa tag list:*)",
   "Bash(line-oa tag get:*)",
+  "Bash(line-oa notes list:*)",
   "Bash(line-oa account list:*)",
   "Bash(line-oa account use:*)",
   "Bash(line-oa auth status:*)"
 ]}}
 ```
 
-Do **not** allowlist `line-oa send`, `line-oa tag delete`, or `line-oa auth from-curl` (all should prompt).
+Do **not** allowlist `line-oa send`, `line-oa tag delete`, `line-oa notes delete`, or `line-oa auth from-curl` (all should prompt).
