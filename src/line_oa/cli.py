@@ -7,6 +7,7 @@ from pathlib import Path
 from . import __version__
 from .commands import content as content_cmd
 from .commands import list_chats, profile, read, search, send
+from .commands import tag as tag_cmd
 from .errors import CliError, EXIT_GENERIC
 
 
@@ -31,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--waiting", action="store_true",
                     help="Only chats whose latest message is from the customer")
     pl.add_argument("--folder", default="ALL", choices=["ALL", "UNREAD", "PINNED"])
+    pl.add_argument("--tag", default=None,
+                    help="Filter to chats with this tag (name; or pass an ID "
+                         "with --tag-by-id). Single-tag only.")
+    pl.add_argument("--tag-by-id", dest="tag_by_id", action="store_true",
+                    help="Treat --tag as a raw LINE tag ID (skip name resolution)")
     pl.add_argument("--raw", action="store_true",
                     help="Emit the full LINE response instead of the curated shape")
 
@@ -119,6 +125,54 @@ def build_parser() -> argparse.ArgumentParser:
     pc.add_argument("--no-cache", action="store_true",
                     help="Always re-fetch even if cached")
 
+    # tag group
+    pt = sub.add_parser(
+        "tag",
+        help="Manage tags (catalog) and per-chat tag assignments",
+        description="Tag catalog ops (list/create/delete) and per-chat tag "
+                    "assignment ops (get/set/add/remove/clear).",
+        epilog=tag_cmd.EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    pt_sub = pt.add_subparsers(dest="tag_cmd", required=True)
+
+    pt_list = pt_sub.add_parser("list", help="List the bot's tag catalog")
+    pt_list.add_argument("--raw", action="store_true",
+                         help="Emit the full LINE response (includes count, "
+                              "createdAt, updatedAt per tag)")
+
+    pt_create = pt_sub.add_parser(
+        "create", help="Create a tag (idempotent on duplicate name)",
+    )
+    pt_create.add_argument("name", help="Tag name (LINE caps at 20 chars)")
+
+    pt_delete = pt_sub.add_parser(
+        "delete", help="Delete a tag from the catalog (destructive)",
+    )
+    pt_delete.add_argument("tag", help="Tag name (or ID with --id)")
+    pt_delete.add_argument("--id", dest="by_id", action="store_true",
+                           help="Treat the positional arg as a raw LINE tag ID")
+    pt_delete.add_argument("--yes", action="store_true",
+                           help="Confirm the delete; required for safety")
+
+    pt_get = pt_sub.add_parser("get", help="Read a chat's current tags")
+    pt_get.add_argument("chat_id")
+
+    for sub_name, sub_help in [
+        ("set",    "Replace the chat's tags with exactly these"),
+        ("add",    "Add tags to the chat (idempotent)"),
+        ("remove", "Remove tags from the chat (idempotent)"),
+    ]:
+        spt = pt_sub.add_parser(sub_name, help=sub_help)
+        spt.add_argument("chat_id")
+        spt.add_argument("tags", nargs="*",
+                         help="Tag names (or IDs with --id)")
+        spt.add_argument("--id", dest="by_id", action="store_true",
+                         help="Treat positional tags as raw LINE tag IDs")
+
+    pt_clear = pt_sub.add_parser("clear", help="Remove ALL tags from a chat")
+    pt_clear.add_argument("chat_id")
+
     # account group
     pa = sub.add_parser("account", help="Manage OA accounts")
     pa_sub = pa.add_subparsers(dest="account_cmd", required=True)
@@ -167,6 +221,7 @@ def main(argv: list[str] | None = None) -> int:
         "send": send.run,
         "search": search.run,
         "content": content_cmd.run,
+        "tag": tag_cmd.run,
         "account": account.run,
         "auth": auth.run,
         "export": export.run,

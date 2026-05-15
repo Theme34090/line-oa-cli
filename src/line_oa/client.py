@@ -107,16 +107,22 @@ def iter_chats(
     bot_id: str,
     *,
     folder: str = "ALL",
+    tag_ids: str | None = None,
     page_size: int = CHAT_LIST_PAGE_SIZE,
     sleep_seconds: float = 0.2,
 ) -> Iterator[dict]:
     """Yield chats from /api/v2/bots/{bot}/chats, paginating until exhausted.
-    Caller decides when to stop (cutoff, max-count, etc.)."""
+    Caller decides when to stop (cutoff, max-count, etc.).
+
+    `tag_ids`: single LINE tag ID (opaque, ~26 base32 chars) to filter by.
+    Multi-tag filtering not supported yet (LINE accepts the param in
+    multiple shapes but AND/OR semantics aren't documented).
+    """
     next_cursor: str | None = None
     while True:
         params = {
             "folderType": folder,
-            "tagIds": "",
+            "tagIds": tag_ids or "",
             "autoTagIds": "",
             "limit": page_size,
             "prioritizePinnedChat": "true",
@@ -135,3 +141,37 @@ def iter_chats(
         if not next_cursor:
             return
         time.sleep(sleep_seconds)
+
+
+def fetch_tag_catalog(client: httpx.Client, bot_id: str) -> list[dict]:
+    """GET /api/v1/bots/{bot}/tags. Returns the full LINE tag list:
+    [{"tagId", "name", "count", "createdAt", "updatedAt"}, ...].
+    Curate at the call site if you want a leaner shape."""
+    resp = client.get(f"/api/v1/bots/{bot_id}/tags")
+    if resp.status_code != 200:
+        raise CliError(
+            f"tag catalog fetch failed: {resp.status_code} {resp.text[:200]}",
+            code=map_http_status(resp.status_code),
+        )
+    return resp.json().get("list", [])
+
+
+def resolve_tag_names(
+    catalog: list[dict],
+    names: list[str],
+) -> tuple[list[str], list[str]]:
+    """Map tag names → IDs against the catalog.
+
+    Returns (resolved_ids, unresolved_names). Order of `names` is
+    preserved in `resolved_ids` for deterministic output.
+    """
+    by_name = {t["name"]: t["tagId"] for t in catalog}
+    resolved: list[str] = []
+    unresolved: list[str] = []
+    for n in names:
+        tid = by_name.get(n)
+        if tid is None:
+            unresolved.append(n)
+        else:
+            resolved.append(tid)
+    return resolved, unresolved

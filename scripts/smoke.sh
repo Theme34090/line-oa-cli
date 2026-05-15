@@ -99,7 +99,7 @@ import json, sys
 chats = json.load(sys.stdin).get('chats', [])
 print(','.join(sorted(chats[0].keys())) if chats else '')
 ")
-EXPECTED_CURATED="chatId,done,followedUp,lastReceivedAt,latest,name,unread"
+EXPECTED_CURATED="chatId,done,followedUp,lastReceivedAt,latest,name,tags,unread"
 if [ "$CURATED_KEYS" = "$EXPECTED_CURATED" ]; then
     green "list curated chat keys exactly: $EXPECTED_CURATED"
     PASS=$((PASS+1))
@@ -218,6 +218,91 @@ else
     red "search curated keys drifted. expected '$EXPECTED_SEARCH_KEYS', got '$SEARCH_KEYS'"
     FAIL=$((FAIL+1))
 fi
+
+heading "Tag"
+SMOKE_TAG="_smoke_lifecycle"
+# Cleanup any leftover tag from a prior failed run.
+line-oa tag delete "$SMOKE_TAG" --yes >/dev/null 2>&1 || true
+
+check "tag list" 0 line-oa tag list
+TAG_LIST_KEYS=$(line-oa tag list 2>/dev/null | python3 -c "
+import json, sys
+tags = json.load(sys.stdin).get('tags', [])
+print(','.join(sorted(tags[0].keys())) if tags else '')
+")
+if [ "$TAG_LIST_KEYS" = "id,name" ]; then
+    green "tag list curated keys exactly: id,name"
+    PASS=$((PASS+1))
+else
+    red "tag list curated keys drifted. expected 'id,name', got '$TAG_LIST_KEYS'"
+    FAIL=$((FAIL+1))
+fi
+
+check "tag get" 0 line-oa tag get "$TEST_CHAT"
+check "tag create (new)" 0 line-oa tag create "$SMOKE_TAG"
+CREATED=$(line-oa tag create "$SMOKE_TAG" 2>/dev/null | python3 -c "
+import json, sys
+print(json.load(sys.stdin).get('created'))
+")
+if [ "$CREATED" = "False" ]; then
+    green "tag create idempotent: second call returns created=False"
+    PASS=$((PASS+1))
+else
+    red "tag create idempotent: expected created=False, got '$CREATED'"
+    FAIL=$((FAIL+1))
+fi
+
+check "tag add" 0 line-oa tag add "$TEST_CHAT" "$SMOKE_TAG"
+ADDED_AFTER=$(line-oa tag get "$TEST_CHAT" 2>/dev/null | python3 -c "
+import json, sys
+names = [t['name'] for t in json.load(sys.stdin).get('tags', [])]
+print('1' if '$SMOKE_TAG' in names else '0')
+")
+if [ "$ADDED_AFTER" = "1" ]; then
+    green "tag add: chat now has '$SMOKE_TAG'"
+    PASS=$((PASS+1))
+else
+    red "tag add: chat does not have '$SMOKE_TAG' after add"
+    FAIL=$((FAIL+1))
+fi
+
+check "tag add (idempotent no-op)" 0 line-oa tag add "$TEST_CHAT" "$SMOKE_TAG"
+check "tag remove" 0 line-oa tag remove "$TEST_CHAT" "$SMOKE_TAG"
+check "tag remove (idempotent no-op)" 0 line-oa tag remove "$TEST_CHAT" "$SMOKE_TAG"
+check "tag delete without --yes => exit 1" 1 line-oa tag delete "$SMOKE_TAG"
+check "tag delete --yes" 0 line-oa tag delete "$SMOKE_TAG" --yes
+
+check "tag add unknown name => exit 1" 1 line-oa tag add "$TEST_CHAT" "_definitely_not_a_real_tag"
+check "tag set with no args => exit 1" 1 line-oa tag set "$TEST_CHAT"
+
+# --tag filter on list. Picks the most-used tag in the catalog as the
+# probe (some OAs have no chats with any one specific tag).
+PROBE_TAG=$(line-oa tag list --raw 2>/dev/null | python3 -c "
+import json, sys
+tags = json.load(sys.stdin).get('tags', [])
+top = max(tags, key=lambda t: t.get('count', 0), default=None)
+if top and top.get('count', 0) > 0:
+    print(top['name'])
+")
+if [ -n "$PROBE_TAG" ]; then
+    FILTER_OK=$(line-oa list --tag "$PROBE_TAG" --limit 5 2>/dev/null | python3 -c "
+import json, sys
+chats = json.load(sys.stdin).get('chats', [])
+print('ok' if chats and all('$PROBE_TAG' in (c.get('tags') or []) for c in chats) else 'fail')
+")
+    if [ "$FILTER_OK" = "ok" ]; then
+        green "list --tag '$PROBE_TAG': every returned chat has the tag"
+        PASS=$((PASS+1))
+    else
+        red "list --tag '$PROBE_TAG': some chats lack the filter tag"
+        FAIL=$((FAIL+1))
+    fi
+else
+    yellow "no in-use tags in catalog — skipping --tag filter check"
+    SKIP=$((SKIP+1))
+fi
+
+check "list --tag with unknown name => exit 1" 1 line-oa list --tag _not_a_real_tag --limit 1
 
 heading "Send (dry-run only — real sends not tested here)"
 check "send --dry-run (auto-manual)" 0 line-oa send "$TEST_CHAT" "smoke" --dry-run

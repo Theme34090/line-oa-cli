@@ -54,8 +54,19 @@ def curate_event(evt: dict, bot_id: str) -> dict | None:
     }
 
 
-def curate_chat(chat: dict, bot_id: str) -> dict:
-    """Project a LINE chat-list entry to the lean CS shape."""
+def curate_chat(
+    chat: dict,
+    bot_id: str,
+    *,
+    tag_id_to_name: dict[str, str] | None = None,
+) -> dict:
+    """Project a LINE chat-list entry to the lean CS shape.
+
+    `tag_id_to_name`: optional ID→name map. When provided, the curated
+    shape gains a `tags: [name, ...]` field (unresolved IDs render as the
+    raw ID string so nothing silently disappears). When omitted, no
+    `tags` field is included.
+    """
     profile = chat.get("profile") or {}
     evt = chat.get("latestEvent") or {}
     msg = evt.get("message") or {}
@@ -71,7 +82,7 @@ def curate_chat(chat: dict, bot_id: str) -> dict:
             "text": msg.get("text"),
             "timestamp": evt.get("timestamp"),
         }
-    return {
+    out = {
         "chatId": chat.get("chatId"),
         "name": profile.get("name"),
         "unread": not chat.get("read", False),
@@ -80,6 +91,12 @@ def curate_chat(chat: dict, bot_id: str) -> dict:
         "lastReceivedAt": chat.get("lastReceivedAt"),
         "latest": latest,
     }
+    if tag_id_to_name is not None:
+        out["tags"] = [
+            tag_id_to_name.get(tid, tid)
+            for tid in (chat.get("tagIds") or [])
+        ]
+    return out
 
 
 def curate_profile(chat_data: dict) -> dict:

@@ -25,12 +25,14 @@ Rules:
 
 | Command | Purpose |
 |---|---|
-| `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED] [--raw]` | List chats |
+| `line-oa list [--waiting] [--since-days N] [--limit N] [--folder ALL\|UNREAD\|PINNED] [--tag NAME] [--raw]` | List chats |
 | `line-oa read CHAT_ID [--backward TOK] [--all] [--raw]` | Read messages, newest first |
 | `line-oa search QUERY [--type message\|profile] [--limit N] [--all] [--next TOK] [--raw]` | Search chats by message text or customer name |
 | `line-oa profile CHAT_ID [--raw]` | Customer profile |
 | `line-oa send CHAT_ID TEXT [--dry-run] [--manual-ttl-minutes N] [--raw]` | Send text reply (TEXT="-" reads stdin). Auto-flips chat to manual mode. |
 | `line-oa content CONTENT_HASH [--out PATH] [--no-cache]` | Download a chat attachment (image/video/audio/file) and cache it locally |
+| `line-oa tag list \| get CHAT_ID \| create NAME \| delete NAME --yes` | Tag catalog ops |
+| `line-oa tag set\|add\|remove CHAT_ID NAME... \| clear CHAT_ID` | Per-chat tag assignment (idempotent; returns before/after) |
 | `line-oa account list \| use NAME \| add NAME BOTID \| remove NAME` | OA registry |
 | `line-oa auth from-curl` | Refresh cookies (cURL on stdin) |
 | `line-oa auth status` | Check session is alive |
@@ -67,6 +69,19 @@ Rules:
 - Describe to the user what you see in the image when relevant ("the receipt totals ฿2,851.75 from CP Axtra on 11 May 2026"). Don't paste raw paths at the user.
 - Stickers don't have a `contentHash` and aren't fetchable through this endpoint — skip them.
 
+## Tagging
+
+Tags help organise chats (VIP, Founder, Churn, etc.). Two layers:
+
+- **Catalog**: `line-oa tag list` shows all tags the bot has. `tag create NAME` adds (idempotent — duplicate name returns the existing tag with `created: false`). `tag delete NAME --yes` removes from the catalog AND from every chat that has it (destructive; the `--yes` is required).
+- **Per-chat**: `tag get CHAT_ID` reads. `tag set / add / remove CHAT_ID NAME...` mutate. `tag clear CHAT_ID` removes all. Mutations return `{before, after, added, removed}` so you can confirm what changed.
+
+Tags are passed by **name** by default. Names with spaces need shell quoting (`tag add U... "Accounting Firm"`). Unknown name → exit 1 with a JSON error embedding the full catalog so you can self-correct.
+
+`line-oa list --tag NAME` filters server-side. The curated `list` shape now includes a `tags: ["vip", ...]` field per chat.
+
+`tag delete` deserves the same human-confirmation treatment as `send` — confirm in plain words before running it. Don't auto-create tags; if the user mentions a tag that doesn't exist, ask whether they want it created first.
+
 ## Exit codes — handle these distinctly
 
 | Code | What it means | What to do |
@@ -95,7 +110,7 @@ When commands start returning exit 2: `pbpaste | line-oa auth from-curl`. Tell t
 
 - Don't volunteer to send unprompted ("would you like me to reply?"). CS initiates.
 - Don't loop over many chats and call `send`. Bulk-send is not in v1.
-- Don't claim a feature exists if it's not in the surface above. Tag/note/assign are not built — say so and offer to file it as a feature request.
+- Don't claim a feature exists if it's not in the surface above. Note/assign are not built — say so and offer to file it as a feature request.
 - Don't dump raw JSON to the user. Summarize; offer JSON on request.
 - Don't fabricate facts about a customer beyond what `read` and `profile` returned.
 
@@ -109,10 +124,12 @@ The user can add this to `~/.claude/settings.json` to skip prompts on read-only 
   "Bash(line-oa read:*)",
   "Bash(line-oa search:*)",
   "Bash(line-oa profile:*)",
+  "Bash(line-oa tag list:*)",
+  "Bash(line-oa tag get:*)",
   "Bash(line-oa account list:*)",
   "Bash(line-oa account use:*)",
   "Bash(line-oa auth status:*)"
 ]}}
 ```
 
-Do **not** allowlist `line-oa send` (every send must prompt) or `line-oa auth from-curl` (cookies on stdin should be visible to the user).
+Do **not** allowlist `line-oa send`, `line-oa tag delete`, or `line-oa auth from-curl` (all should prompt).

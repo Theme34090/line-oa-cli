@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from line_oa import config as cfgmod
-from line_oa.client import CLIENT_VERSION, USER_AGENT, make_client
+from line_oa.client import CLIENT_VERSION, USER_AGENT, make_client, resolve_tag_names
 from line_oa.commands._curate import (
     curate_chat,
     curate_event,
@@ -18,6 +18,7 @@ from line_oa.commands._curate import (
 from line_oa.commands.auth import _parse_curl
 from line_oa.commands.list_chats import _is_waiting
 from line_oa.commands.send import _make_send_id
+from line_oa.commands.tag import _curate_tag, _ids_to_names, _mutation_response
 from line_oa.errors import EXIT_NO_ACCOUNT, CliError
 
 SAMPLE_BOT = "U26397124b8700690b7331d7a16436277"
@@ -422,6 +423,146 @@ class ConfigRoundtripTests(unittest.TestCase):
             cfgmod.save(cfg, p)
             loaded = cfgmod.load(p)
             self.assertEqual(loaded, cfg)
+
+
+class CurateChatWithTagsTests(unittest.TestCase):
+    BOT = SAMPLE_BOT
+    CUSTOMER = SAMPLE_CHAT
+
+    def _chat(self, **overrides) -> dict:
+        base = {
+            "chatId": self.CUSTOMER,
+            "read": False,
+            "done": False,
+            "followedUp": False,
+            "lastReceivedAt": 1700000000000,
+            "profile": {"name": "Customer"},
+            "latestEvent": {},
+            "tagIds": ["tagA", "tagB"],
+        }
+        base.update(overrides)
+        return base
+
+    def test_omits_tags_when_no_map(self):
+        result = curate_chat(self._chat(), self.BOT)
+        self.assertNotIn("tags", result)
+
+    def test_includes_tags_resolved_to_names(self):
+        result = curate_chat(
+            self._chat(), self.BOT,
+            tag_id_to_name={"tagA": "vip", "tagB": "support"},
+        )
+        self.assertEqual(result["tags"], ["vip", "support"])
+
+    def test_unknown_id_renders_as_raw_id(self):
+        # Unresolved IDs must surface as the raw string, not silently drop.
+        result = curate_chat(
+            self._chat(), self.BOT,
+            tag_id_to_name={"tagA": "vip"},
+        )
+        self.assertEqual(result["tags"], ["vip", "tagB"])
+
+    def test_empty_tag_ids_yields_empty_list(self):
+        result = curate_chat(
+            self._chat(tagIds=[]), self.BOT,
+            tag_id_to_name={"tagA": "vip"},
+        )
+        self.assertEqual(result["tags"], [])
+
+    def test_missing_tag_ids_field_yields_empty_list(self):
+        chat = self._chat()
+        del chat["tagIds"]
+        result = curate_chat(chat, self.BOT, tag_id_to_name={})
+        self.assertEqual(result["tags"], [])
+
+
+class ResolveTagNamesTests(unittest.TestCase):
+    CATALOG = [
+        {"tagId": "id-vip", "name": "vip"},
+        {"tagId": "id-support", "name": "support"},
+        {"tagId": "id-spaces", "name": "Accounting Firm"},
+    ]
+
+    def test_all_resolve(self):
+        ids, missing = resolve_tag_names(self.CATALOG, ["vip", "support"])
+        self.assertEqual(ids, ["id-vip", "id-support"])
+        self.assertEqual(missing, [])
+
+    def test_preserves_input_order(self):
+        ids, _ = resolve_tag_names(self.CATALOG, ["support", "vip"])
+        self.assertEqual(ids, ["id-support", "id-vip"])
+
+    def test_partial_resolve(self):
+        ids, missing = resolve_tag_names(self.CATALOG, ["vip", "unknown"])
+        # Even though one fails, resolved ones still come back — caller
+        # decides whether to abort. (tag.py's _resolve_tag_args aborts.)
+        self.assertEqual(ids, ["id-vip"])
+        self.assertEqual(missing, ["unknown"])
+
+    def test_name_with_spaces(self):
+        ids, missing = resolve_tag_names(self.CATALOG, ["Accounting Firm"])
+        self.assertEqual(ids, ["id-spaces"])
+        self.assertEqual(missing, [])
+
+    def test_empty_input(self):
+        ids, missing = resolve_tag_names(self.CATALOG, [])
+        self.assertEqual(ids, [])
+        self.assertEqual(missing, [])
+
+
+class TagCurationTests(unittest.TestCase):
+    def test_curate_tag_drops_metadata(self):
+        raw = {
+            "tagId": "id-1", "name": "vip",
+            "count": 7, "createdAt": 1, "updatedAt": 2,
+        }
+        self.assertEqual(_curate_tag(raw), {"id": "id-1", "name": "vip"})
+
+    def test_ids_to_names_unknown_falls_back_to_id(self):
+        catalog = [{"tagId": "a", "name": "alpha"}]
+        self.assertEqual(_ids_to_names(catalog, ["a", "b"]), ["alpha", "b"])
+
+
+class MutationResponseTests(unittest.TestCase):
+    CATALOG = [
+        {"tagId": "id-vip", "name": "vip"},
+        {"tagId": "id-support", "name": "support"},
+        {"tagId": "id-urgent", "name": "urgent"},
+    ]
+
+    def test_add_diff(self):
+        out = _mutation_response(
+            "acct", "U1", before_ids=["id-vip"],
+            after_ids=["id-vip", "id-support"], catalog=self.CATALOG,
+        )
+        self.assertEqual(out["before"], ["vip"])
+        self.assertEqual(out["after"], ["vip", "support"])
+        self.assertEqual(out["added"], ["support"])
+        self.assertEqual(out["removed"], [])
+
+    def test_remove_diff(self):
+        out = _mutation_response(
+            "acct", "U1", before_ids=["id-vip", "id-support"],
+            after_ids=["id-vip"], catalog=self.CATALOG,
+        )
+        self.assertEqual(out["added"], [])
+        self.assertEqual(out["removed"], ["support"])
+
+    def test_clear_diff(self):
+        out = _mutation_response(
+            "acct", "U1", before_ids=["id-vip", "id-urgent"],
+            after_ids=[], catalog=self.CATALOG,
+        )
+        self.assertEqual(out["after"], [])
+        self.assertEqual(set(out["removed"]), {"vip", "urgent"})
+
+    def test_noop_diff(self):
+        out = _mutation_response(
+            "acct", "U1", before_ids=["id-vip"],
+            after_ids=["id-vip"], catalog=self.CATALOG,
+        )
+        self.assertEqual(out["added"], [])
+        self.assertEqual(out["removed"], [])
 
 
 class ClientHeadersTests(unittest.TestCase):
