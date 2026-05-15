@@ -70,10 +70,13 @@ def cmd_list(args) -> int:
             f"list notes failed: {resp.status_code} {resp.text[:200]}",
             code=map_http_status(resp.status_code),
         )
-    data = resp.json()
-    notes = data.get("list", [])
+    notes = resp.json().get("list", [])
     if args.raw:
-        emit_json({"account": name, "chatId": args.chat_id, **data})
+        emit_json({
+            "account": name,
+            "chatId": args.chat_id,
+            "list": notes,
+        })
     else:
         emit_json({
             "account": name,
